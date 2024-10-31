@@ -2674,22 +2674,22 @@ fn test_stake_during_interval() {
     // after half the duration, half the rewards (50) should be distributed.
     suite.skip_blocks(50);
 
-    // MEMBER1 has 50% voting power, so should receive 50% of the rewards.
-    suite.assert_pending_rewards(MEMBER1, 1, 25);
+    // ADDR0 has 50% voting power, so should receive 50% of the rewards.
+    suite.assert_pending_rewards(ADDR0, 1, 25);
 
-    // change voting power before the next distribution interval. MEMBER1 now
+    // change voting power before the next distribution interval. ADDR0 now
     // has 80% voting power, an increase from 50%.
-    suite.mint_native(coin(300, GOV_DENOM), MEMBER1);
-    suite.stake_native_tokens(MEMBER1, 300);
+    suite.mint_native(coin(300, GOV_DENOM), ADDR0);
+    suite.stake_native_tokens(ADDR0, 300);
 
     // after the rest of the initial duration, they should earn rewards at the
     // increased rate (50 more tokens, and they own 80% of them). 25 + 40 = 65
     suite.skip_blocks(50);
-    suite.assert_pending_rewards(MEMBER1, 1, 65);
+    suite.assert_pending_rewards(ADDR0, 1, 65);
 
     // after 50 more blocks from VP change, there are 40 more rewards.
     suite.skip_blocks(50);
-    suite.assert_pending_rewards(MEMBER1, 1, 105);
+    suite.assert_pending_rewards(ADDR0, 1, 105);
 }
 
 #[test]
@@ -2711,28 +2711,28 @@ fn test_stake_on_edges_of_interval() {
     // after half the duration, half the rewards (50) should be distributed.
     suite.skip_blocks(50);
 
-    // MEMBER1 has 50% voting power, so should receive 50% of the rewards.
-    suite.assert_pending_rewards(MEMBER1, 1, 25);
+    // ADDR0 has 50% voting power, so should receive 50% of the rewards.
+    suite.assert_pending_rewards(ADDR0, 1, 25);
 
     // after the full duration, all the rewards (50) should be distributed.
     suite.skip_blocks(50);
 
-    // MEMBER1 has 50% voting power, so should receive 50% of the rewards.
-    suite.assert_pending_rewards(MEMBER1, 1, 50);
+    // ADDR0 has 50% voting power, so should receive 50% of the rewards.
+    suite.assert_pending_rewards(ADDR0, 1, 50);
 
     // change voting power right at the end of the distribution interval.
-    // MEMBER1 now has 80% voting power, an increase from 50%.
-    suite.mint_native(coin(300, GOV_DENOM), MEMBER1);
-    suite.stake_native_tokens(MEMBER1, 300);
+    // ADDR0 now has 80% voting power, an increase from 50%.
+    suite.mint_native(coin(300, GOV_DENOM), ADDR0);
+    suite.stake_native_tokens(ADDR0, 300);
 
     // after another interval, they should earn rewards at the increased rate
     // (50 more tokens, and they own 80% of them). 50 + 40 = 90
     suite.skip_blocks(50);
-    suite.assert_pending_rewards(MEMBER1, 1, 90);
+    suite.assert_pending_rewards(ADDR0, 1, 90);
 
     // after 50 more blocks from VP change, there are 40 more rewards.
     suite.skip_blocks(50);
-    suite.assert_pending_rewards(MEMBER1, 1, 130);
+    suite.assert_pending_rewards(ADDR0, 1, 130);
 }
 
 #[test]
