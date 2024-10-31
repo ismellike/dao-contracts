@@ -2488,7 +2488,6 @@ version = "2.5.1"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
- "cw-denom 2.4.1",
  "cw-denom 2.5.1",
  "cw-hooks 2.5.1",
  "cw-multi-test",
@@ -2497,8 +2496,6 @@ dependencies = [
  "cw-utils 1.0.3",
  "cw2 1.1.2",
  "dao-interface 2.5.1",
- "dao-pre-propose-base 2.4.1",
- "dao-voting 2.4.1",
  "dao-voting 2.5.1",
  "semver",
  "serde",

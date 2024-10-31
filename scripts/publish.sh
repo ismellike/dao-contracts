@@ -68,11 +68,11 @@ cd packages/dao-dao-macros
 cargo hack publish --no-dev-deps --allow-dirty
 cd "$START_DIR"
 
-cd packages/dao-pre-propose-base
+cd packages/dao-voting
 cargo publish
 cd "$START_DIR"
 
-cd packages/dao-voting
+cd packages/dao-pre-propose-base
 cargo publish
 cd "$START_DIR"
 
