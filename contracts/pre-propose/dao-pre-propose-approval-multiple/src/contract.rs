@@ -1,21 +1,17 @@
-use cosmwasm_schema::cw_serde;
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    to_json_binary, Addr, Binary, CosmosMsg, Deps, DepsMut, Empty, Env, MessageInfo, Order,
-    Response, StdError, StdResult, SubMsg, Uint128, WasmMsg,
+    to_json_binary, Binary, Deps, DepsMut, Empty, Env, MessageInfo, Order, Response, StdResult,
+    SubMsg, WasmMsg,
 };
 use cw2::set_contract_version;
-use cw_denom::CheckedDenom;
 use cw_paginate_storage::paginate_map_values;
-use cw_storage_plus::Map;
 use dao_pre_propose_base::{
     error::PreProposeError, msg::ExecuteMsg as ExecuteBase, state::PreProposeContract,
 };
 use dao_voting::approval::{ApprovalProposalStatus, ApproverProposeMessage};
-use dao_voting::deposit::{CheckedDepositInfo, DepositRefundPolicy};
-use dao_voting::proposal::SingleChoiceProposeMsg as ProposeMsg;
-use dao_voting::voting::{SingleChoiceAutoVote, Vote};
+use dao_voting::deposit::DepositRefundPolicy;
+use dao_voting::proposal::MultipleChoiceProposeMsg as ProposeMsg;
 
 use crate::msg::{
     ExecuteExt, ExecuteMsg, InstantiateExt, InstantiateMsg, MigrateMsg, ProposeMessage,
@@ -26,7 +22,7 @@ use crate::state::{
     CREATED_PROPOSAL_TO_COMPLETED_PROPOSAL, PENDING_PROPOSALS,
 };
 
-pub(crate) const CONTRACT_NAME: &str = "crates.io:dao-pre-propose-approval-single";
+pub(crate) const CONTRACT_NAME: &str = "crates.io:dao-pre-propose-approval-multiple";
 pub(crate) const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 type PrePropose = PreProposeContract<InstantiateExt, ExecuteExt, QueryExt, Empty, ProposeMessage>;
@@ -98,12 +94,12 @@ pub fn execute_propose(
         ProposeMessage::Propose {
             title,
             description,
-            msgs,
+            choices,
             vote,
         } => ProposeMsg {
             title,
             description,
-            msgs,
+            choices,
             proposer: Some(info.sender.to_string()),
             vote,
         },
@@ -416,234 +412,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn migrate(mut deps: DepsMut, _env: Env, msg: MigrateMsg) -> Result<Response, PreProposeError> {
-    let res: Result<Response, PreProposeError> =
-        PrePropose::default().migrate(deps.branch(), msg.clone());
-    match msg {
-        MigrateMsg::FromUnderV250 { .. } => {
-            // the default migrate function above ensures >= v2.4.1 and < v2.5.0
-
-            #[cw_serde]
-            struct ProposalV241 {
-                /// The status of a completed proposal.
-                pub status: ProposalStatusV241,
-                /// The approval ID used to identify this pending proposal.
-                pub approval_id: u64,
-                /// The address that created the proposal.
-                pub proposer: Addr,
-                /// The propose message that ought to be executed on the
-                /// proposal message if this proposal is approved.
-                pub msg: SingleChoiceProposeMsgV241,
-                /// Snapshot of the deposit info at the time of proposal
-                /// submission.
-                pub deposit: Option<CheckedDepositInfoV241>,
-            }
-
-            #[cw_serde]
-            enum ProposalStatusV241 {
-                /// The proposal is pending approval.
-                Pending {},
-                /// The proposal has been approved.
-                Approved {
-                    /// The created proposal ID.
-                    created_proposal_id: u64,
-                },
-                /// The proposal has been rejected.
-                Rejected {},
-            }
-
-            #[cw_serde]
-            struct SingleChoiceProposeMsgV241 {
-                /// The title of the proposal.
-                pub title: String,
-                /// A description of the proposal.
-                pub description: String,
-                /// The messages that should be executed in response to this
-                /// proposal passing.
-                pub msgs: Vec<CosmosMsg<Empty>>,
-                /// The address creating the proposal. If no pre-propose
-                /// module is attached to this module this must always be None
-                /// as the proposer is the sender of the propose message. If a
-                /// pre-propose module is attached, this must be Some and will
-                /// set the proposer of the proposal it creates.
-                pub proposer: Option<String>,
-                /// An optional vote cast by the proposer.
-                pub vote: Option<SingleChoiceAutoVoteV241>,
-            }
-
-            #[cw_serde]
-            #[derive(Copy)]
-            #[repr(u8)]
-            enum VoteV241 {
-                /// Marks support for the proposal.
-                Yes,
-                /// Marks opposition to the proposal.
-                No,
-                /// Marks participation but does not count towards the ratio of
-                /// support / opposed.
-                Abstain,
-            }
-
-            #[cw_serde]
-            struct SingleChoiceAutoVoteV241 {
-                /// The proposer's position on the proposal.
-                pub vote: VoteV241,
-                /// An optional rationale for why this vote was cast. This can
-                /// be updated, set, or removed later by the address casting
-                /// the vote.
-                pub rationale: Option<String>,
-            }
-
-            #[cw_serde]
-            enum DepositRefundPolicyV241 {
-                /// Deposits should always be refunded.
-                Always,
-                /// Deposits should only be refunded for passed proposals.
-                OnlyPassed,
-                /// Deposits should never be refunded.
-                Never,
-            }
-
-            /// Counterpart to the `DepositInfo` struct which has been
-            /// processed. This type should never be constructed literally and
-            /// should always by built by calling `into_checked` on a
-            /// `DepositInfo` instance.
-            #[cw_serde]
-            struct CheckedDepositInfoV241 {
-                /// The address of the cw20 token to be used for proposal
-                /// deposits.
-                pub denom: CheckedDenomV241,
-                /// The number of tokens that must be deposited to create a
-                /// proposal. This is validated to be non-zero if this struct is
-                /// constructed by converted via the `into_checked` method on
-                /// `DepositInfo`.
-                pub amount: Uint128,
-                /// The policy used for refunding proposal deposits.
-                pub refund_policy: DepositRefundPolicyV241,
-            }
-
-            #[cw_serde]
-            enum CheckedDenomV241 {
-                /// A native (bank module) asset.
-                Native(String),
-                /// A cw20 asset.
-                Cw20(Addr),
-            }
-
-            let pending_proposals_v241: Map<u64, ProposalV241> = Map::new("pending_proposals");
-            let completed_proposals_v241: Map<u64, ProposalV241> = Map::new("completed_proposals");
-
-            // migrate proposals to add approver
-
-            let approver = APPROVER.load(deps.storage)?;
-
-            let pending_proposals = pending_proposals_v241
-                .range(deps.storage, None, None, Order::Ascending)
-                .collect::<StdResult<Vec<_>>>()?;
-            for (id, proposal) in pending_proposals {
-                PENDING_PROPOSALS.save(
-                    deps.storage,
-                    id,
-                    &Proposal {
-                        status: ApprovalProposalStatus::Pending {},
-                        approval_id: proposal.approval_id,
-                        approver: approver.clone(),
-                        proposer: proposal.proposer,
-                        msg: ProposeMsg {
-                            title: proposal.msg.title,
-                            description: proposal.msg.description,
-                            msgs: proposal.msg.msgs,
-                            proposer: proposal.msg.proposer,
-                            vote: proposal.msg.vote.map(|vote| SingleChoiceAutoVote {
-                                vote: match vote.vote {
-                                    VoteV241::Yes => Vote::Yes,
-                                    VoteV241::No => Vote::No,
-                                    VoteV241::Abstain => Vote::Abstain,
-                                },
-                                rationale: vote.rationale,
-                            }),
-                        },
-                        deposit: proposal.deposit.map(|deposit| CheckedDepositInfo {
-                            denom: match deposit.denom {
-                                CheckedDenomV241::Native(denom) => CheckedDenom::Native(denom),
-                                CheckedDenomV241::Cw20(addr) => CheckedDenom::Cw20(addr),
-                            },
-                            amount: deposit.amount,
-                            refund_policy: match deposit.refund_policy {
-                                DepositRefundPolicyV241::Always => DepositRefundPolicy::Always,
-                                DepositRefundPolicyV241::OnlyPassed => {
-                                    DepositRefundPolicy::OnlyPassed
-                                }
-                                DepositRefundPolicyV241::Never => DepositRefundPolicy::Never,
-                            },
-                        }),
-                    },
-                )?;
-            }
-
-            let completed_proposals = completed_proposals_v241
-                .range(deps.storage, None, None, Order::Ascending)
-                .collect::<StdResult<Vec<_>>>()?;
-            for (id, proposal) in completed_proposals {
-                COMPLETED_PROPOSALS.save(
-                    deps.storage,
-                    id,
-                    &Proposal {
-                        status: match proposal.status {
-                            ProposalStatusV241::Approved {
-                                created_proposal_id,
-                            } => ApprovalProposalStatus::Approved {
-                                created_proposal_id,
-                            },
-                            ProposalStatusV241::Rejected {} => ApprovalProposalStatus::Rejected {},
-                            // should not be possible since these are completed
-                            // proposals only
-                            ProposalStatusV241::Pending {} => {
-                                return Err(PreProposeError::Std(StdError::generic_err(
-                                    "unexpected proposal status",
-                                )))
-                            }
-                        },
-                        approval_id: proposal.approval_id,
-                        approver: approver.clone(),
-                        proposer: proposal.proposer,
-                        msg: ProposeMsg {
-                            title: proposal.msg.title,
-                            description: proposal.msg.description,
-                            msgs: proposal.msg.msgs,
-                            proposer: proposal.msg.proposer,
-                            vote: proposal.msg.vote.map(|vote| SingleChoiceAutoVote {
-                                vote: match vote.vote {
-                                    VoteV241::Yes => Vote::Yes,
-                                    VoteV241::No => Vote::No,
-                                    VoteV241::Abstain => Vote::Abstain,
-                                },
-                                rationale: vote.rationale,
-                            }),
-                        },
-                        deposit: proposal.deposit.map(|deposit| CheckedDepositInfo {
-                            denom: match deposit.denom {
-                                CheckedDenomV241::Native(denom) => CheckedDenom::Native(denom),
-                                CheckedDenomV241::Cw20(addr) => CheckedDenom::Cw20(addr),
-                            },
-                            amount: deposit.amount,
-                            refund_policy: match deposit.refund_policy {
-                                DepositRefundPolicyV241::Always => DepositRefundPolicy::Always,
-                                DepositRefundPolicyV241::OnlyPassed => {
-                                    DepositRefundPolicy::OnlyPassed
-                                }
-                                DepositRefundPolicyV241::Never => DepositRefundPolicy::Never,
-                            },
-                        }),
-                    },
-                )?;
-            }
-        }
-        _ => {
-            return Err(PreProposeError::Std(StdError::generic_err(
-                "not implemented",
-            )))
-        }
-    }
+    let res = PrePropose::default().migrate(deps.branch(), msg);
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
     res
 }
