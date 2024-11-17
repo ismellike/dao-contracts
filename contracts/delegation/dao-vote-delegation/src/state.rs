@@ -29,7 +29,7 @@ pub const DAO: Item<Addr> = Item::new("dao");
 
 /// the active proposal modules loaded from the DAO that can execute
 /// proposal-related hooks.
-pub const PROPOSAL_HOOK_CALLERS: Map<Addr, ()> = Map::new("dpm");
+pub const PROPOSAL_HOOK_CALLERS: Map<Addr, ()> = Map::new("phc");
 
 /// the contracts that can execute the voting power change hooks. these should
 /// be DAO voting modules or their associated staking contracts.
