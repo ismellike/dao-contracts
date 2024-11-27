@@ -248,6 +248,20 @@ impl DaoVoteDelegationTestingSuite {
 
 /// QUERIES
 impl DaoVoteDelegationTestingSuite {
+    /// get whether a delegate is registered
+    pub fn registered(&self, delegate: impl Into<String>, height: Option<u64>) -> bool {
+        self.querier()
+            .query_wasm_smart::<dao_voting::delegation::RegistrationResponse>(
+                &self.delegation_addr,
+                &crate::msg::QueryMsg::Registration {
+                    delegate: delegate.into(),
+                    height,
+                },
+            )
+            .unwrap()
+            .registered
+    }
+
     /// get the delegates
     pub fn delegates(
         &self,
@@ -361,16 +375,30 @@ impl DaoVoteDelegationTestingSuite {
             .any(|d| d.delegate == delegate.into() && d.percent == percent && d.active));
     }
 
+    /// assert that a delegate is registered
+    pub fn assert_delegate_registered(
+        &self,
+        delegate: impl Into<String> + Copy,
+        height: Option<u64>,
+    ) {
+        let registered = self.registered(delegate, height);
+        assert!(registered);
+    }
+
+    /// assert that a delegate is not registered
+    pub fn assert_delegate_not_registered(
+        &self,
+        delegate: impl Into<String> + Copy,
+        height: Option<u64>,
+    ) {
+        let registered = self.registered(delegate, height);
+        assert!(!registered);
+    }
+
     /// assert that there are N delegates
     pub fn assert_delegates_count(&self, count: u32) {
         let delegates = self.delegates(None, None);
         assert_eq!(delegates.len() as u32, count);
-    }
-
-    /// assert a delegate is registered
-    pub fn assert_registered(&self, delegate: impl Into<String> + Copy) {
-        let delegates = self.delegates(None, None);
-        assert!(delegates.iter().any(|d| d.delegate == delegate.into()));
     }
 
     /// assert a delegate's total delegated voting power

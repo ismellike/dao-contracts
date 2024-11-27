@@ -12,7 +12,8 @@ use dao_interface::helpers::OptionalUpdate;
 use dao_interface::state::{ProposalModule, ProposalModuleStatus};
 use dao_interface::voting::InfoResponse;
 use dao_voting::delegation::{
-    calculate_delegated_vp, DelegationResponse, UnvotedDelegatedVotingPowerResponse,
+    calculate_delegated_vp, DelegationResponse, RegistrationResponse,
+    UnvotedDelegatedVotingPowerResponse,
 };
 use dao_voting::voting;
 use semver::Version;
@@ -462,6 +463,9 @@ fn execute_update_config(
 pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::Info {} => Ok(to_json_binary(&query_info(deps)?)?),
+        QueryMsg::Registration { delegate, height } => Ok(to_json_binary(&query_registration(
+            deps, env, delegate, height,
+        )?)?),
         QueryMsg::Delegates { start_after, limit } => Ok(to_json_binary(&query_delegates(
             deps,
             env,
@@ -500,6 +504,27 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
 fn query_info(deps: Deps) -> StdResult<InfoResponse> {
     let info = get_contract_version(deps.storage)?;
     Ok(InfoResponse { info })
+}
+
+fn query_registration(
+    deps: Deps,
+    env: Env,
+    delegate: String,
+    height: Option<u64>,
+) -> StdResult<RegistrationResponse> {
+    let height = height.unwrap_or(env.block.height);
+    let delegate = deps.api.addr_validate(&delegate)?;
+
+    let registered = is_delegate_registered(deps, &delegate, Some(height))?;
+    let power = DELEGATED_VP
+        .load(deps.storage, delegate, height)?
+        .unwrap_or_default();
+
+    Ok(RegistrationResponse {
+        registered,
+        power,
+        height,
+    })
 }
 
 fn query_delegates(
