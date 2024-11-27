@@ -8,6 +8,12 @@ pub enum QueryMsg {
     /// Returns contract version info
     #[returns(InfoResponse)]
     Info {},
+    /// Returns registration info for a delegate, optionally at a given height.
+    #[returns(RegistrationResponse)]
+    Registration {
+        delegate: String,
+        height: Option<u64>,
+    },
     /// Returns the paginated list of active delegates.
     #[returns(DelegatesResponse)]
     Delegates {
@@ -48,6 +54,17 @@ pub enum QueryMsg {
         start_after: Option<String>,
         limit: Option<u32>,
     },
+}
+
+#[cw_serde]
+pub struct RegistrationResponse {
+    /// Whether or not the delegate is registered.
+    pub registered: bool,
+    /// The total voting power delegated to the delegate. If not registered,
+    /// this may still be nonzero if the delegate was registered in the past.
+    pub power: Uint128,
+    /// The height at which registration was checked.
+    pub height: u64,
 }
 
 #[cw_serde]

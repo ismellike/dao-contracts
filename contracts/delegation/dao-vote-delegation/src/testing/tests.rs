@@ -41,16 +41,23 @@ fn test_simple() {
             .collect::<Vec<_>>()
     );
 
+    suite.assert_delegate_not_registered(ADDR0, None);
+
     // register ADDR0 as a delegate
     suite.register(ADDR0);
     suite.assert_delegates_count(1);
-    suite.assert_registered(ADDR0);
 
     // delegate 100% of addr1's voting power to ADDR0
     suite.delegate(ADDR1, ADDR0, Decimal::percent(100));
 
     // delegations take effect on the next block
     suite.advance_block();
+
+    // ensure registered
+    suite.assert_delegate_registered(ADDR0, None);
+    suite.assert_delegate_registered(ADDR0, Some(suite.app.block_info().height));
+    // historical check works
+    suite.assert_delegate_not_registered(ADDR0, Some(suite.app.block_info().height - 1));
 
     suite.assert_delegations_count(ADDR1, 1);
     suite.assert_delegation(ADDR1, ADDR0, Decimal::percent(100));
@@ -185,12 +192,15 @@ fn test_simple() {
 
     suite.assert_delegate_total_delegated_vp(ADDR0, total_vp_except_addr0);
 
+    suite.assert_delegate_registered(ADDR0, None);
+
     // unregister ADDR0 as a delegate
     suite.unregister(ADDR0);
 
     // delegations take effect on the next block
     suite.advance_block();
 
+    suite.assert_delegate_not_registered(ADDR0, None);
     suite.assert_delegates_count(0);
 
     // propose another proposal
@@ -621,6 +631,10 @@ fn test_allow_register_after_unregister_same_block() {
     suite.register(ADDR0);
     suite.unregister(ADDR0);
     suite.register(ADDR0);
+
+    // ensure registered
+    suite.advance_block();
+    suite.assert_delegate_registered(ADDR0, None);
 }
 
 #[test]
@@ -632,6 +646,10 @@ fn test_allow_register_after_unregister_next_block() {
     suite.unregister(ADDR0);
     suite.advance_block();
     suite.register(ADDR0);
+
+    // ensure registered
+    suite.advance_block();
+    suite.assert_delegate_registered(ADDR0, None);
 }
 
 #[test]
