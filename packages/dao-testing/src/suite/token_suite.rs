@@ -22,7 +22,7 @@ pub struct TokenDaoExtra {
 
 pub type TokenTestDao = TestDao<TokenDaoExtra>;
 
-impl<'a> Deref for DaoTestingSuiteToken<'a> {
+impl Deref for DaoTestingSuiteToken<'_> {
     type Target = DaoTestingSuiteBase;
 
     fn deref(&self) -> &Self::Target {
@@ -30,7 +30,7 @@ impl<'a> Deref for DaoTestingSuiteToken<'a> {
     }
 }
 
-impl<'a> DerefMut for DaoTestingSuiteToken<'a> {
+impl DerefMut for DaoTestingSuiteToken<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.base
     }
@@ -136,7 +136,7 @@ impl<'a> DaoTestingSuiteToken<'a> {
     }
 }
 
-impl<'a> DaoTestingSuite<TokenDaoExtra> for DaoTestingSuiteToken<'a> {
+impl DaoTestingSuite<TokenDaoExtra> for DaoTestingSuiteToken<'_> {
     fn base(&self) -> &DaoTestingSuiteBase {
         self
     }

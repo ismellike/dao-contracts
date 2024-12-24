@@ -31,7 +31,7 @@ pub struct LoadedItem<V> {
     pub expiration: Option<u64>,
 }
 
-impl<'a, K, V> SnapshotVectorMap<'a, K, V> {
+impl<K, V> SnapshotVectorMap<'_, K, V> {
     /// Creates a new [`SnapshotVectorMap`] with the given storage keys.
     ///
     /// Example:
