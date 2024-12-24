@@ -23,7 +23,7 @@ pub struct Cw20DaoExtra {
 
 pub type Cw20TestDao = TestDao<Cw20DaoExtra>;
 
-impl<'a> Deref for DaoTestingSuiteCw20<'a> {
+impl Deref for DaoTestingSuiteCw20<'_> {
     type Target = DaoTestingSuiteBase;
 
     fn deref(&self) -> &Self::Target {
@@ -31,7 +31,7 @@ impl<'a> Deref for DaoTestingSuiteCw20<'a> {
     }
 }
 
-impl<'a> DerefMut for DaoTestingSuiteCw20<'a> {
+impl DerefMut for DaoTestingSuiteCw20<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.base
     }
@@ -143,7 +143,7 @@ impl<'a> DaoTestingSuiteCw20<'a> {
     }
 }
 
-impl<'a> DaoTestingSuite<Cw20DaoExtra> for DaoTestingSuiteCw20<'a> {
+impl DaoTestingSuite<Cw20DaoExtra> for DaoTestingSuiteCw20<'_> {
     fn base(&self) -> &DaoTestingSuiteBase {
         self
     }
