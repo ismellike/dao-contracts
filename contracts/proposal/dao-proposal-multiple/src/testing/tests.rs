@@ -182,6 +182,9 @@ fn test_propose() {
         votes: MultipleChoiceVotes {
             vote_weights: vec![Uint128::zero(); 3],
         },
+        individual_votes: MultipleChoiceVotes {
+            vote_weights: vec![Uint128::zero(); 3],
+        },
         allow_revoting: false,
         min_voting_period: None,
         veto: None,
@@ -396,6 +399,9 @@ fn test_propose_auto_vote_winner() {
         votes: MultipleChoiceVotes {
             vote_weights: vec![Uint128::new(100_000_000), Uint128::zero(), Uint128::zero()],
         },
+        individual_votes: MultipleChoiceVotes {
+            vote_weights: vec![Uint128::new(100_000_000), Uint128::zero(), Uint128::zero()],
+        },
         allow_revoting: false,
         min_voting_period: None,
         veto: None,
@@ -487,6 +493,9 @@ fn test_propose_auto_vote_reject() {
         voting_strategy,
         total_power: Uint128::new(100_000_000),
         votes: MultipleChoiceVotes {
+            vote_weights: vec![Uint128::zero(), Uint128::zero(), Uint128::new(100_000_000)],
+        },
+        individual_votes: MultipleChoiceVotes {
             vote_weights: vec![Uint128::zero(), Uint128::zero(), Uint128::new(100_000_000)],
         },
         allow_revoting: false,
@@ -2257,6 +2266,9 @@ fn test_open_proposal_submission() {
         votes: MultipleChoiceVotes {
             vote_weights: vec![Uint128::zero(); 3],
         },
+        individual_votes: MultipleChoiceVotes {
+            vote_weights: vec![Uint128::zero(); 3],
+        },
         veto: None,
         delegation_module: None,
     };
@@ -2871,6 +2883,9 @@ fn test_query_list_proposals() {
             votes: MultipleChoiceVotes {
                 vote_weights: vec![Uint128::zero(); 3],
             },
+            individual_votes: MultipleChoiceVotes {
+                vote_weights: vec![Uint128::zero(); 3],
+            },
             allow_revoting: false,
             min_voting_period: None,
             veto: None,
@@ -2899,6 +2914,9 @@ fn test_query_list_proposals() {
             voting_strategy,
             total_power: Uint128::new(100),
             votes: MultipleChoiceVotes {
+                vote_weights: vec![Uint128::zero(); 3],
+            },
+            individual_votes: MultipleChoiceVotes {
                 vote_weights: vec![Uint128::zero(); 3],
             },
             allow_revoting: false,

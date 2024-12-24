@@ -556,6 +556,7 @@
                 "type": "object",
                 "required": [
                   "height",
+                  "individual_power",
                   "is_first_vote",
                   "power",
                   "proposal_id",
@@ -569,12 +570,20 @@
                     "format": "uint64",
                     "minimum": 0.0
                   },
+                  "individual_power": {
+                    "description": "The individual voting power of the voter (excluding any delegated voting power).",
+                    "allOf": [
+                      {
+                        "$ref": "#/definitions/Uint128"
+                      }
+                    ]
+                  },
                   "is_first_vote": {
                     "description": "Whether this is the first vote cast by this voter on this proposal. This will always be true if revoting is disabled.",
                     "type": "boolean"
                   },
                   "power": {
-                    "description": "The voting power of the voter.",
+                    "description": "The total voting power of the voter.",
                     "allOf": [
                       {
                         "$ref": "#/definitions/Uint128"

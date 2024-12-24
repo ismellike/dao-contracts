@@ -13,8 +13,11 @@ pub enum VoteHookMsg {
         voter: String,
         /// The vote that was cast.
         vote: String,
-        /// The voting power of the voter.
+        /// The total voting power of the voter.
         power: Uint128,
+        /// The individual voting power of the voter (excluding any delegated
+        /// voting power).
+        individual_power: Uint128,
         /// The block height at which the voting power is calculated.
         height: u64,
         /// Whether this is the first vote cast by this voter on this proposal.
@@ -34,6 +37,7 @@ pub fn new_vote_hooks(
     voter: String,
     vote: String,
     power: Uint128,
+    individual_power: Uint128,
     height: u64,
     is_first_vote: bool,
 ) -> StdResult<Vec<SubMsg>> {
@@ -42,6 +46,7 @@ pub fn new_vote_hooks(
         voter,
         vote,
         power,
+        individual_power,
         height,
         is_first_vote,
     }))?;

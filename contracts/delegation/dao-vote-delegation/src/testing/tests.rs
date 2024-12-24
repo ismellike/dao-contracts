@@ -625,6 +625,106 @@ fn test_vote_with_override() {
 }
 
 #[test]
+fn test_overrideable_vote_doesnt_end_proposal_early() {
+    let mut suite = DaoVoteDelegationTestingSuite::new().build();
+    let dao = suite.dao.clone();
+
+    // register ADDR0 and ADDR1 as delegates
+    suite.register(ADDR0);
+    suite.register(ADDR1);
+
+    // delegate all of ADDR2's and ADDR3's voting power to ADDR0
+    suite.delegate(ADDR2, ADDR0, Decimal::percent(100));
+    suite.delegate(ADDR3, ADDR0, Decimal::percent(100));
+    // delegate all of ADDR4's voting power to ADDR1
+    suite.delegate(ADDR4, ADDR1, Decimal::percent(100));
+
+    // delegations take effect on the next block
+    suite.advance_block();
+
+    // ensure delegations are correctly applied
+    suite.assert_delegations_count(ADDR2, 1);
+    suite.assert_delegations_count(ADDR3, 1);
+    suite.assert_delegations_count(ADDR4, 1);
+
+    // propose a proposal
+    let (proposal_module, id1, p1) =
+        suite.propose_single_choice(&dao, ADDR2, "test proposal", vec![]);
+
+    // ADDR0 has 100% of ADDR2's voting power and 100% of ADDR3's voting power
+    suite.assert_effective_udvp(
+        ADDR0,
+        &proposal_module,
+        id1,
+        p1.start_height,
+        suite.members[2].weight + suite.members[3].weight,
+    );
+    // ADDR1 has 100% of ADDR4's voting power
+    suite.assert_effective_udvp(
+        ADDR1,
+        &proposal_module,
+        id1,
+        p1.start_height,
+        suite.members[4].weight,
+    );
+
+    // delegate ADDR0 votes on proposal
+    suite.vote_single_choice(&dao, ADDR0, id1, dao_voting::voting::Vote::Yes);
+
+    // proposal should not pass early, even though sufficient voting power has
+    // voted for the configured threshold/quorum, because the delegators can
+    // override the delegate's vote and change the outcome
+    suite.assert_single_choice_status(&proposal_module, id1, dao_voting::status::Status::Open);
+
+    // ADDR0 votes with own voting power, 100% of ADDR2's voting power, and 100%
+    // of ADDR3's voting power
+    suite.assert_single_choice_votes_count(
+        &proposal_module,
+        id1,
+        dao_voting::voting::Vote::Yes,
+        suite.members[0].weight + suite.members[2].weight + suite.members[3].weight,
+    );
+
+    // ADDR2 overrides ADDR0's vote
+    suite.vote_single_choice(&dao, ADDR2, id1, dao_voting::voting::Vote::No);
+    // ADDR0's unvoted delegated voting power should no longer include ADDR2's
+    // voting power on this proposal
+    suite.assert_effective_udvp(
+        ADDR0,
+        &proposal_module,
+        id1,
+        p1.start_height,
+        suite.members[3].weight,
+    );
+    // vote counts should change to reflect removed (overridden) delegate vote
+    suite.assert_single_choice_votes_count(
+        &proposal_module,
+        id1,
+        dao_voting::voting::Vote::Yes,
+        suite.members[0].weight + suite.members[3].weight,
+    );
+    suite.assert_single_choice_votes_count(
+        &proposal_module,
+        id1,
+        dao_voting::voting::Vote::No,
+        suite.members[2].weight,
+    );
+
+    // proposal should still be open since only ADDR0's personal voting power
+    // (1) and ADDR2's voting power (3) has been counted as definitive votes.
+    // The remaining 6 voting power has either not been used to cast a vote or
+    // is defaulting to a delegate's vote but can still be overridden.
+    suite.assert_single_choice_status(&proposal_module, id1, dao_voting::status::Status::Open);
+
+    // delegator ADDR3 votes, adding their 3 VP to ADDR2's 3 VP, meaning the
+    // outcome is now determined to be No.
+    suite.vote_single_choice(&dao, ADDR3, id1, dao_voting::voting::Vote::No);
+
+    // proposal should be rejected since the outcome is now determined to be No
+    suite.assert_single_choice_status(&proposal_module, id1, dao_voting::status::Status::Rejected);
+}
+
+#[test]
 fn test_allow_register_after_unregister_same_block() {
     let mut suite = DaoVoteDelegationTestingSuite::new().build();
 

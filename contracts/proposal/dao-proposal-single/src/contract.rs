@@ -228,6 +228,7 @@ pub fn execute_propose(
             msgs,
             status: Status::Open,
             votes: Votes::zero(),
+            individual_votes: Votes::zero(),
             allow_revoting: config.allow_revoting,
             veto: config.veto,
             delegation_module,
@@ -515,7 +516,7 @@ pub fn execute_vote(
         proposal_id,
         prop.start_height,
     )?;
-    if vote_power.is_zero() {
+    if vote_power.individual.is_zero() {
         return Err(ContractError::NotRegistered {});
     }
 
@@ -537,8 +538,10 @@ pub fn execute_vote(
                     // Remove the old vote if this is a re-vote.
                     prop.votes
                         .remove_vote(current_ballot.vote, current_ballot.power);
+                    prop.individual_votes
+                        .remove_vote(current_ballot.vote, current_ballot.power);
                     Ok(Ballot {
-                        power: vote_power,
+                        power: vote_power.total,
                         vote,
                         // Roll over the previous rationale. If
                         // you're changing your vote, you've also
@@ -551,7 +554,7 @@ pub fn execute_vote(
             }
         }
         None => Ok(Ballot {
-            power: vote_power,
+            power: vote_power.total,
             vote,
             rationale: rationale.clone(),
         }),
@@ -624,7 +627,7 @@ pub fn execute_vote(
                             },
                         )?;
 
-                    let voter_delegated_vp = calculate_delegated_vp(vote_power, percent);
+                    let voter_delegated_vp = calculate_delegated_vp(vote_power.individual, percent);
 
                     // subtract this voter's delegated VP from the delegate's
                     // total VP, and cap the result at the delegate's effective
@@ -643,7 +646,7 @@ pub fn execute_vote(
                     if new_effective_delegated < prev_udvp.effective {
                         // how much VP the delegate is losing based on this
                         // voter's VP and the cap.
-                        let diff = prev_udvp.effective.checked_sub(new_effective_delegated)?;
+                        let diff = prev_udvp.effective - new_effective_delegated;
 
                         // update ballot total and vote tally by removing the
                         // lost delegated VP only. this makes sure to fully
@@ -661,7 +664,8 @@ pub fn execute_vote(
 
     let old_status = prop.status;
 
-    prop.votes.add_vote(vote, vote_power);
+    prop.votes.add_vote(vote, vote_power.total);
+    prop.individual_votes.add_vote(vote, vote_power.individual);
     prop.update_status(&env.block)?;
 
     PROPOSALS.save(deps.storage, proposal_id, &prop)?;
@@ -681,7 +685,8 @@ pub fn execute_vote(
         proposal_id,
         sender.to_string(),
         vote.to_string(),
-        vote_power,
+        vote_power.total,
+        vote_power.individual,
         prop.start_height,
         is_first_vote,
     )?;
@@ -1194,7 +1199,8 @@ pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> Result<Response, Co
                         total_power: prop.total_power,
                         msgs: prop.msgs,
                         status: v1_status_to_v2(prop.status),
-                        votes: v1_votes_to_v2(prop.votes),
+                        votes: v1_votes_to_v2(prop.votes.clone()),
+                        individual_votes: v1_votes_to_v2(prop.votes),
                         allow_revoting: prop.allow_revoting,
                         veto: None,
                         delegation_module: None,

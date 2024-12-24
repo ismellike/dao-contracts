@@ -451,16 +451,4 @@ impl DaoVoteDelegationTestingSuite {
         );
         assert_eq!(udvp.effective, effective.into());
     }
-
-    /// assert vote count on single choice proposal
-    pub fn assert_single_choice_votes_count(
-        &self,
-        proposal_module: impl Into<String>,
-        proposal_id: u64,
-        vote: dao_voting::voting::Vote,
-        count: impl Into<Uint128>,
-    ) {
-        let proposal = self.get_single_choice_proposal(proposal_module, proposal_id);
-        assert_eq!(proposal.votes.get(vote), count.into());
-    }
 }
