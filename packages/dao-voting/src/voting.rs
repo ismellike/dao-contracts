@@ -41,7 +41,6 @@ pub struct SingleChoiceAutoVote {
     /// the vote.
     pub rationale: Option<String>,
 }
-
 pub enum VoteCmp {
     Greater,
     Geq,
@@ -228,6 +227,13 @@ pub fn get_voting_power(
     Ok(response.power)
 }
 
+pub struct VotingPowerWithDelegation {
+    /// Individual voting power.
+    pub individual: Uint128,
+    /// Total voting power (individual + unvoted delegated voting power).
+    pub total: Uint128,
+}
+
 /// Query the voting power for a member, including any voting power delegated to
 /// them by other members, given the proposal and its start_height. This should
 /// be used when calculating voting power used to vote. This is not necessary
@@ -242,15 +248,9 @@ pub fn get_voting_power_with_delegation(
     proposal_id: u64,
     // the proposal start_height at which voting power should be queried
     height: u64,
-) -> StdResult<Uint128> {
+) -> StdResult<VotingPowerWithDelegation> {
     // get individual voting power from voting module
-    let voting::VotingPowerAtHeightResponse { power, .. } = deps.querier.query_wasm_smart(
-        dao,
-        &voting::Query::VotingPowerAtHeight {
-            address: address.to_string(),
-            height: Some(height),
-        },
-    )?;
+    let individual = get_voting_power(deps, address.clone(), dao, Some(height))?;
 
     // get effective VP delegated to this address from other members of the DAO
     // that has not yet been used to vote on the given proposal. if this query
@@ -275,7 +275,9 @@ pub fn get_voting_power_with_delegation(
         .effective;
 
     // sum both to get total voting power for this address on this proposal
-    Ok(power.checked_add(udvp)?)
+    let total = individual.checked_add(udvp)?;
+
+    Ok(VotingPowerWithDelegation { individual, total })
 }
 
 /// A height of None will query for the current block height.

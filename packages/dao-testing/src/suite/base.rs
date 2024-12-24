@@ -3,7 +3,9 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use cosmwasm_std::{to_json_binary, Addr, Coin, CosmosMsg, Empty, QuerierWrapper, Timestamp};
+use cosmwasm_std::{
+    to_json_binary, Addr, Coin, CosmosMsg, Empty, QuerierWrapper, Timestamp, Uint128,
+};
 use cw20::Cw20Coin;
 use cw_multi_test::{error::AnyResult, App, AppResponse, Contract, Executor};
 use cw_utils::Duration;
@@ -610,5 +612,28 @@ impl DaoTestingSuiteBase {
             )
             .unwrap()
             .proposal
+    }
+
+    /// assert vote count on single choice proposal
+    pub fn assert_single_choice_votes_count(
+        &self,
+        proposal_module: impl Into<String>,
+        proposal_id: u64,
+        vote: dao_voting::voting::Vote,
+        count: impl Into<Uint128>,
+    ) {
+        let proposal = self.get_single_choice_proposal(proposal_module, proposal_id);
+        assert_eq!(proposal.votes.get(vote), count.into());
+    }
+
+    /// assert status on single choice proposal
+    pub fn assert_single_choice_status(
+        &self,
+        proposal_module: impl Into<String>,
+        proposal_id: u64,
+        status: dao_voting::status::Status,
+    ) {
+        let proposal = self.get_single_choice_proposal(proposal_module, proposal_id);
+        assert_eq!(proposal.status, status);
     }
 }

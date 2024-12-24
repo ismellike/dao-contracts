@@ -133,6 +133,7 @@ fn test_simple_propose_staked_balances() {
         status: Status::Open,
         veto: None,
         votes: Votes::zero(),
+        individual_votes: Votes::zero(),
         delegation_module: None,
     };
 
@@ -184,6 +185,7 @@ fn test_simple_proposal_cw4_voting() {
         status: Status::Open,
         veto: None,
         votes: Votes::zero(),
+        individual_votes: Votes::zero(),
         delegation_module: None,
     };
 
@@ -241,6 +243,11 @@ fn test_simple_proposal_auto_vote_yes() {
             no: Uint128::zero(),
             abstain: Uint128::zero(),
         },
+        individual_votes: Votes {
+            yes: Uint128::new(1),
+            no: Uint128::zero(),
+            abstain: Uint128::zero(),
+        },
         delegation_module: None,
     };
 
@@ -287,6 +294,11 @@ fn test_simple_proposal_auto_vote_no() {
         status: Status::Rejected,
         veto: None,
         votes: Votes {
+            yes: Uint128::zero(),
+            no: Uint128::new(1),
+            abstain: Uint128::zero(),
+        },
+        individual_votes: Votes {
             yes: Uint128::zero(),
             no: Uint128::new(1),
             abstain: Uint128::zero(),
@@ -389,6 +401,7 @@ fn test_instantiate_with_non_voting_module_cw20_deposit() {
         msgs: vec![],
         status: Status::Open,
         votes: Votes::zero(),
+        individual_votes: Votes::zero(),
         veto: None,
         delegation_module: None,
     };
@@ -2251,6 +2264,11 @@ fn test_anyone_may_propose_and_proposal_listing() {
                     no: Uint128::zero(),
                     abstain: Uint128::zero()
                 },
+                individual_votes: Votes {
+                    yes: Uint128::new(100_000_000),
+                    no: Uint128::zero(),
+                    abstain: Uint128::zero()
+                },
                 veto: None,
                 delegation_module: None,
             }
@@ -3536,6 +3554,7 @@ fn test_reply_proposal_mock() {
                 status: Status::Open,
                 veto: None,
                 votes: Votes::zero(),
+                individual_votes: Votes::zero(),
                 delegation_module: None,
             },
         )
