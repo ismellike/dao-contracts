@@ -1,4 +1,3 @@
-use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Addr, Decimal, Uint128};
 use cw_snapshot_vector_map::SnapshotVectorMap;
 use cw_storage_plus::{Item, Map, SnapshotItem, SnapshotMap, Strategy};
@@ -6,7 +5,7 @@ use cw_storage_plus::{Item, Map, SnapshotItem, SnapshotMap, Strategy};
 use cw_wormhole::Wormhole;
 
 // make these types directly available to consumers of this crate
-pub use dao_voting::delegation::{Delegate, Delegation};
+pub use dao_voting::delegation::{Config, Delegate, Delegation};
 
 /// the configuration of the delegation system.
 pub const CONFIG: Item<Config> = Item::new("config");
@@ -69,10 +68,3 @@ pub const DELEGATION_ENTRIES: Map<(&Addr, &Addr), (u64, Option<u64>)> = Map::new
 
 /// map delegator -> percent delegated to all delegates.
 pub const PERCENT_DELEGATED: Map<&Addr, Decimal> = Map::new("pd");
-
-#[cw_serde]
-pub struct Config {
-    /// the number of blocks a delegation is valid for, after which it must be
-    /// renewed by the delegator.
-    pub delegation_validity_blocks: Option<u64>,
-}

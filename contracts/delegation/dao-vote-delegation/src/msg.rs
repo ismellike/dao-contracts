@@ -26,8 +26,22 @@ pub struct InstantiateMsg {
     /// applied when casting votes.
     pub vp_cap_percent: Option<Decimal>,
     /// the number of blocks a delegation is valid for, after which it must be
-    /// renewed by the delegator.
+    /// renewed by the delegator. if not set, the delegation will never expire.
     pub delegation_validity_blocks: Option<u64>,
+    /// the total number of delegations a member can have. this should be set
+    /// based on the max gas allowed in a single block for the given chain.
+    ///
+    /// this limit is relevant for two reasons:
+    ///  1. when voting power is updated for a delegator, we must loop through
+    ///     all of their delegates and update their delegated voting power
+    ///  2. when a delegator casts a vote on a proposal that overrides their
+    ///     delegates' votes, we must loop through all of their delegates and
+    ///     update the proposal vote tally accordingly
+    ///
+    /// in tests on Neutron, with a block max gas of 30M (which is one of the
+    /// lowest gas limits on any chain), we found that 50 delegations is a safe
+    /// upper bound, so this defaults to 50.
+    pub max_delegations: Option<u64>,
 }
 
 #[cw_serde]
@@ -71,8 +85,21 @@ pub enum ExecuteMsg {
         /// only applied when casting votes.
         vp_cap_percent: OptionalUpdate<Decimal>,
         /// the number of blocks a delegation is valid for, after which it must
-        /// be renewed by the delegator.
+        /// be renewed by the delegator. if not set, the delegation will never
+        /// expire.
         delegation_validity_blocks: OptionalUpdate<u64>,
+        /// the total number of delegations a member can have. this should be
+        /// set based on the max gas allowed in a single block for the given
+        /// chain.
+        ///
+        /// this limit is relevant for two reasons:
+        ///  1. when voting power is updated for a delegator, we must loop
+        ///     through all of their delegates and update their delegated voting
+        ///     power
+        ///  2. when a delegator casts a vote on a proposal that overrides their
+        ///     delegates' votes, we must loop through all of their delegates
+        ///     and update the proposal vote tally accordingly
+        max_delegations: Option<u64>,
     },
     /// Called when a member is added or removed
     /// to a cw4-groups or cw721-roles contract.

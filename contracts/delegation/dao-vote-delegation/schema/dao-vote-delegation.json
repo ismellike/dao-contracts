@@ -15,7 +15,16 @@
         ]
       },
       "delegation_validity_blocks": {
-        "description": "the number of blocks a delegation is valid for, after which it must be renewed by the delegator.",
+        "description": "the number of blocks a delegation is valid for, after which it must be renewed by the delegator. if not set, the delegation will never expire.",
+        "type": [
+          "integer",
+          "null"
+        ],
+        "format": "uint64",
+        "minimum": 0.0
+      },
+      "max_delegations": {
+        "description": "the total number of delegations a member can have. this should be set based on the max gas allowed in a single block for the given chain.\n\nthis limit is relevant for two reasons: 1. when voting power is updated for a delegator, we must loop through all of their delegates and update their delegated voting power 2. when a delegator casts a vote on a proposal that overrides their delegates' votes, we must loop through all of their delegates and update the proposal vote tally accordingly\n\nin tests on Neutron, with a block max gas of 30M (which is one of the lowest gas limits on any chain), we found that 50 delegations is a safe upper bound, so this defaults to 50.",
         "type": [
           "integer",
           "null"
@@ -230,12 +239,21 @@
             ],
             "properties": {
               "delegation_validity_blocks": {
-                "description": "the number of blocks a delegation is valid for, after which it must be renewed by the delegator.",
+                "description": "the number of blocks a delegation is valid for, after which it must be renewed by the delegator. if not set, the delegation will never expire.",
                 "allOf": [
                   {
                     "$ref": "#/definitions/OptionalUpdate_for_uint64"
                   }
                 ]
+              },
+              "max_delegations": {
+                "description": "the total number of delegations a member can have. this should be set based on the max gas allowed in a single block for the given chain.\n\nthis limit is relevant for two reasons: 1. when voting power is updated for a delegator, we must loop through all of their delegates and update their delegated voting power 2. when a delegator casts a vote on a proposal that overrides their delegates' votes, we must loop through all of their delegates and update the proposal vote tally accordingly",
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0.0
               },
               "vp_cap_percent": {
                 "description": "the maximum percent of voting power that a single delegate can wield. they can be delegated any amount of voting power—this cap is only applied when casting votes.",
@@ -835,6 +853,20 @@
           }
         },
         "additionalProperties": false
+      },
+      {
+        "description": "Returns the config.",
+        "type": "object",
+        "required": [
+          "config"
+        ],
+        "properties": {
+          "config": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
       }
     ]
   },
@@ -846,6 +878,32 @@
   },
   "sudo": null,
   "responses": {
+    "config": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Config",
+      "type": "object",
+      "required": [
+        "max_delegations"
+      ],
+      "properties": {
+        "delegation_validity_blocks": {
+          "description": "the number of blocks a delegation is valid for, after which it must be renewed by the delegator. if not set, the delegation will never expire.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "max_delegations": {
+          "description": "the total number of delegations a member can have. this should be set based on the max gas allowed in a single block for the given chain.\n\nthis limit is relevant for two reasons: 1. when voting power is updated for a delegator, we must loop through all of their delegates and update their delegated voting power 2. when a delegator casts a vote on a proposal that overrides their delegates' votes, we must loop through all of their delegates and update the proposal vote tally accordingly\n\nin tests on Neutron, with a block max gas of 30M (which is one of the lowest gas limits on any chain), we found that 50 delegations is a safe upper bound.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      },
+      "additionalProperties": false
+    },
     "delegates": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "DelegatesResponse",

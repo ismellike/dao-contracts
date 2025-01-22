@@ -14,9 +14,7 @@ use dao_hooks::proposal::{
 };
 use dao_hooks::vote::new_vote_hooks;
 use dao_interface::voting::IsActiveResponse;
-use dao_voting::delegation::{
-    self, calculate_delegated_vp, DelegationResponse, UnvotedDelegatedVotingPowerResponse,
-};
+use dao_voting::delegation::handle_delegate_vote_override;
 use dao_voting::voting::get_voting_power_with_delegation;
 use dao_voting::{
     multiple_choice::{MultipleChoiceVote, MultipleChoiceVotes, VotingStrategy},
@@ -95,18 +93,18 @@ pub fn instantiate(
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn execute(
-    deps: DepsMut,
+    mut deps: DepsMut,
     env: Env,
     info: MessageInfo,
     msg: ExecuteMsg,
 ) -> Result<Response<Empty>, ContractError> {
     match msg {
-        ExecuteMsg::Propose(propose_msg) => execute_propose(deps, env, info, propose_msg),
+        ExecuteMsg::Propose(propose_msg) => execute_propose(&mut deps, env, info, propose_msg),
         ExecuteMsg::Vote {
             proposal_id,
             vote,
             rationale,
-        } => execute_vote(deps, env, info.sender, proposal_id, vote, rationale),
+        } => execute_vote(&mut deps, env, info.sender, proposal_id, vote, rationale),
         ExecuteMsg::Execute { proposal_id } => execute_execute(deps, env, info, proposal_id),
         ExecuteMsg::Veto { proposal_id } => execute_veto(deps, env, info, proposal_id),
         ExecuteMsg::Close { proposal_id } => execute_close(deps, env, info, proposal_id),
@@ -155,7 +153,7 @@ pub fn execute(
 }
 
 pub fn execute_propose(
-    deps: DepsMut,
+    deps: &mut DepsMut,
     env: Env,
     info: MessageInfo,
     ProposeMsg {
@@ -377,7 +375,7 @@ pub fn execute_veto(
 }
 
 pub fn execute_vote(
-    deps: DepsMut,
+    deps: &mut DepsMut,
     env: Env,
     sender: Addr,
     proposal_id: u64,
@@ -455,106 +453,20 @@ pub fn execute_vote(
         }),
     })?;
 
-    // DELEGATION VOTE OVERRIDE: if this is the first time this member voted,
-    // subtract their VP from the vote tally of all of their delegates who
-    // already voted on this proposal, in order to override their vote with the
-    // delegator's preference.
-    //
-    // we must load all delegations and update each. if this partially fails,
-    // the vote tallies will be incorrect, so the entire vote transaction should
-    // fail. we need to prevent this from happening by limiting the number of
-    // delegations a member can have in order to ensure votes can always be
-    // cast.
+    // DELEGATE VOTE OVERRIDE: if this is the first time this member voted,
+    // override their delegates' votes with the delegator's vote.
     if is_first_vote {
-        if let Some(delegation_module) = &prop.delegation_module {
-            let delegations = deps
-                .querier
-                .query_wasm_smart::<delegation::DelegationsResponse>(
-                    delegation_module,
-                    &delegation::QueryMsg::Delegations {
-                        delegator: sender.to_string(),
-                        height: Some(prop.start_height),
-                        offset: None,
-                        limit: None,
-                    },
-                    // ensure query error gets returned if it fails.
-                )?
-                .delegations;
-
-            for DelegationResponse {
-                delegate,
-                percent,
-                active,
-            } in delegations
-            {
-                // if delegation is not active, skip.
-                if !active {
-                    continue;
-                }
-
-                // if delegate voted already, untally the VP the delegator
-                // delegated to them since the delegate's vote is being
-                // overridden.
-                if let Some(mut delegate_ballot) =
-                    BALLOTS.may_load(deps.storage, (proposal_id, &delegate))?
-                {
-                    // get the delegate's current unvoted delegated VP. since we
-                    // are currently overriding this delegate's vote, this UDVP
-                    // response will not yet take into account the loss of this
-                    // current voter's delegated VP, so we have to do math below
-                    // to remove this voter's VP from the delegate's effective
-                    // VP. the vote hook at the end of this fn will update this
-                    // UDVP in the delegation module for future votes.
-                    //
-                    // NOTE: this UDVP query reflects updates immediately,
-                    // instead of waiting 1 block to take effect like other
-                    // historical queries, so this will reflect the updated UDVP
-                    // from the vote hooks within the same block, making it safe
-                    // to vote twice in the same block.
-                    let prev_udvp: UnvotedDelegatedVotingPowerResponse =
-                        deps.querier.query_wasm_smart(
-                            delegation_module,
-                            &delegation::QueryMsg::UnvotedDelegatedVotingPower {
-                                delegate: delegate.to_string(),
-                                proposal_module: env.contract.address.to_string(),
-                                proposal_id,
-                                height: prop.start_height,
-                            },
-                        )?;
-
-                    let voter_delegated_vp = calculate_delegated_vp(vote_power.individual, percent);
-
-                    // subtract this voter's delegated VP from the delegate's
-                    // total VP, and cap the result at the delegate's effective
-                    // VP. if the delegate has been delegated in total more than
-                    // this voter's delegated VP above the cap, they will not
-                    // lose any VP. they will lose part or all of this voter's
-                    // delegated VP based on how their total VP ranks relative
-                    // to the cap.
-                    let new_effective_delegated = prev_udvp
-                        .total
-                        .checked_sub(voter_delegated_vp)?
-                        .min(prev_udvp.effective);
-
-                    // if the new effective VP is less than the previous
-                    // effective VP, update the delegate's ballot and tally.
-                    if new_effective_delegated < prev_udvp.effective {
-                        // how much VP the delegate is losing based on this
-                        // voter's VP and the cap.
-                        let diff = prev_udvp.effective - new_effective_delegated;
-
-                        // update ballot total and vote tally by removing the
-                        // lost delegated VP only. this makes sure to fully
-                        // preserve the delegate's personal VP even if they lose
-                        // all delegated VP due to delegators overriding votes.
-                        delegate_ballot.power -= diff;
-                        prop.votes.remove_vote(delegate_ballot.vote, diff)?;
-
-                        BALLOTS.save(deps.storage, (proposal_id, &delegate), &delegate_ballot)?;
-                    }
-                }
-            }
-        }
+        handle_delegate_vote_override(
+            deps.branch(),
+            &sender,
+            &prop.delegation_module,
+            &env.contract.address,
+            proposal_id,
+            prop.start_height,
+            &vote_power,
+            BALLOTS,
+            &mut |vote, power| prop.votes.remove_vote(*vote, power),
+        )?;
     }
 
     let old_status = prop.status;
