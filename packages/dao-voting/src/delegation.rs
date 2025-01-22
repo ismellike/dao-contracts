@@ -1,6 +1,13 @@
-use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{Addr, Decimal, Uint128};
+use cosmwasm_schema::{
+    cw_serde,
+    serde::{de::DeserializeOwned, Serialize},
+    QueryResponses,
+};
+use cosmwasm_std::{Addr, Decimal, DepsMut, StdResult, Uint128};
+use cw_storage_plus::Map;
 use dao_interface::voting::InfoResponse;
+
+use crate::{proposal::Ballot, voting::VotingPowerWithDelegation};
 
 #[cw_serde]
 #[derive(QueryResponses)]
@@ -54,6 +61,9 @@ pub enum QueryMsg {
         start_after: Option<String>,
         limit: Option<u32>,
     },
+    /// Returns the config.
+    #[returns(Config)]
+    Config {},
 }
 
 #[cw_serde]
@@ -126,6 +136,27 @@ pub struct Delegation {
     pub percent: Decimal,
 }
 
+#[cw_serde]
+pub struct Config {
+    /// the number of blocks a delegation is valid for, after which it must be
+    /// renewed by the delegator. if not set, the delegation will never expire.
+    pub delegation_validity_blocks: Option<u64>,
+    /// the total number of delegations a member can have. this should be set
+    /// based on the max gas allowed in a single block for the given chain.
+    ///
+    /// this limit is relevant for two reasons:
+    ///  1. when voting power is updated for a delegator, we must loop through
+    ///     all of their delegates and update their delegated voting power
+    ///  2. when a delegator casts a vote on a proposal that overrides their
+    ///     delegates' votes, we must loop through all of their delegates and
+    ///     update the proposal vote tally accordingly
+    ///
+    /// in tests on Neutron, with a block max gas of 30M (which is one of the
+    /// lowest gas limits on any chain), we found that 50 delegations is a safe
+    /// upper bound.
+    pub max_delegations: u64,
+}
+
 /// Calculate delegated voting power given a member's total voting power and a
 /// percent delegated.
 pub fn calculate_delegated_vp(vp: Uint128, percent: Decimal) -> Uint128 {
@@ -134,4 +165,120 @@ pub fn calculate_delegated_vp(vp: Uint128, percent: Decimal) -> Uint128 {
     }
 
     vp.mul_floor(percent)
+}
+
+// DELEGATE VOTE OVERRIDE: if this is the first time this member voted, override
+// their delegates' votes with the delegator's vote.
+//
+// subtract the delegator's VP from the vote tally of all of their delegates who
+// already voted on this proposal, in order to override their vote with the
+// delegator's preference.
+//
+// we must load all delegations and update each. if this partially fails, the
+// vote tallies will be incorrect, so the entire vote transaction should fail.
+// we need to prevent this from happening by limiting the number of delegations
+// a member can have in order to ensure votes can always be cast.
+#[allow(clippy::too_many_arguments)]
+pub fn handle_delegate_vote_override<Vote: Serialize + DeserializeOwned>(
+    deps: DepsMut,
+    delegator: &Addr,
+    delegation_module: &Option<Addr>,
+    proposal_module: &Addr,
+    proposal_id: u64,
+    proposal_start_height: u64,
+    vote_power: &VotingPowerWithDelegation,
+    ballots: Map<(u64, &Addr), Ballot<Vote>>,
+    remove_vote: &mut impl FnMut(&Vote, Uint128) -> StdResult<()>,
+) -> StdResult<()> {
+    if let Some(delegation_module) = delegation_module {
+        let delegations = deps
+            .querier
+            .query_wasm_smart::<DelegationsResponse>(
+                delegation_module,
+                &QueryMsg::Delegations {
+                    delegator: delegator.to_string(),
+                    height: Some(proposal_start_height),
+                    offset: None,
+                    limit: None,
+                },
+                // ensure query error gets returned if it fails.
+            )?
+            .delegations;
+
+        for DelegationResponse {
+            delegate,
+            percent,
+            active,
+        } in delegations
+        {
+            // if delegation is not active, skip.
+            if !active {
+                continue;
+            }
+
+            // if delegate voted already, untally the VP the delegator delegated
+            // to them since the delegate's vote is being overridden.
+            if let Some(mut delegate_ballot) =
+                ballots.may_load(deps.storage, (proposal_id, &delegate))?
+            {
+                // get the delegate's current unvoted delegated VP. since we are
+                // currently overriding this delegate's vote, this UDVP response
+                // will not yet take into account the loss of this current
+                // voter's delegated VP, so we have to do math below to remove
+                // this voter's VP from the delegate's effective VP. the vote
+                // hook at the end of the proposal module's vote function will
+                // update this UDVP in the delegation module for future votes.
+                //
+                // NOTE: this UDVP query reflects updates immediately, instead
+                // of waiting 1 block to take effect like other historical
+                // queries, so this will reflect the updated UDVP from the vote
+                // hooks within the same block, making it safe to vote twice in
+                // the same block.
+                let prev_udvp: UnvotedDelegatedVotingPowerResponse =
+                    deps.querier.query_wasm_smart(
+                        delegation_module,
+                        &QueryMsg::UnvotedDelegatedVotingPower {
+                            delegate: delegate.to_string(),
+                            proposal_module: proposal_module.to_string(),
+                            proposal_id,
+                            height: proposal_start_height,
+                        },
+                    )?;
+
+                let voter_delegated_vp = calculate_delegated_vp(vote_power.individual, percent);
+
+                // subtract this voter's delegated VP from the delegate's total
+                // VP, and cap the result at the delegate's effective VP, to
+                // ensure we properly take into account the configured VP cap.
+                // if the delegate has been delegated in total more than this
+                // voter's delegated VP above the cap, they will not lose any
+                // VP. they will lose part or all of this voter's delegated VP
+                // based on how their total VP ranks relative to the configured
+                // cap.
+                let new_effective_delegated = prev_udvp
+                    .total
+                    .checked_sub(voter_delegated_vp)?
+                    .min(prev_udvp.effective);
+
+                // if the new effective VP is less than the previous effective
+                // VP, update the delegate's ballot and tally.
+                if new_effective_delegated < prev_udvp.effective {
+                    // how much VP the delegate is losing based on this voter's
+                    // VP and the cap.
+                    let diff = prev_udvp.effective - new_effective_delegated;
+
+                    // update ballot total and vote tally by removing the lost
+                    // delegated VP only. this makes sure to fully preserve the
+                    // delegate's personal VP even if they lose all delegated VP
+                    // due to delegators overriding votes.
+                    delegate_ballot.power -= diff;
+                    remove_vote(&delegate_ballot.vote, diff)?;
+
+                    ballots.save(deps.storage, (proposal_id, &delegate), &delegate_ballot)?;
+                }
+            }
+        }
+    }
+
+    Ok(())
 }

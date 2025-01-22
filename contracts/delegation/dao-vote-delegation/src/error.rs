@@ -55,6 +55,9 @@ pub enum ContractError {
     #[error("invalid voting power percent")]
     InvalidVotingPowerPercent {},
 
+    #[error("cannot delegate more than {max} delegations (current: {current})")]
+    MaxDelegationsReached { max: u64, current: usize },
+
     #[error("migration error: incorrect contract: expected \"{expected}\", actual \"{actual}\"")]
     MigrationErrorIncorrectContract { expected: String, actual: String },
 

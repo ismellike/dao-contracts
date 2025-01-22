@@ -6,7 +6,10 @@ use cw_multi_test::{Contract, ContractWrapper};
 use dao_interface::helpers::OptionalUpdate;
 use dao_testing::{ADDR0, ADDR1, ADDR2, ADDR3, ADDR4};
 
-use crate::contract::{CONTRACT_NAME, CONTRACT_VERSION};
+use crate::{
+    contract::{CONTRACT_NAME, CONTRACT_VERSION, DEFAULT_MAX_DELEGATIONS},
+    ContractError,
+};
 
 use super::*;
 
@@ -448,6 +451,72 @@ fn test_expiration_update() {
 }
 
 #[test]
+fn test_max_delegations() {
+    let mut suite = DaoVoteDelegationTestingSuite::new()
+        .with_max_delegations(2)
+        .build();
+
+    // register 3 delegates
+    suite.register(ADDR0);
+    suite.register(ADDR1);
+    suite.register(ADDR2);
+
+    // delegate to ADDR0 and ADDR1
+    suite.delegate(ADDR3, ADDR0, Decimal::percent(10));
+    suite.delegate(ADDR3, ADDR1, Decimal::percent(10));
+    // delegations take effect on the next block
+    suite.advance_block();
+
+    suite.assert_delegations_count(ADDR3, 2);
+
+    // update delegation
+    suite.delegate(ADDR3, ADDR0, Decimal::percent(20));
+    // delegations take effect on the next block
+    suite.advance_block();
+
+    suite.assert_delegations_count(ADDR3, 2);
+
+    // try to delegate to ADDR2
+    let err = suite.delegate_error(ADDR3, ADDR2, Decimal::percent(10));
+    assert_eq!(
+        err,
+        ContractError::MaxDelegationsReached { max: 2, current: 2 }
+    );
+
+    suite.assert_delegations_count(ADDR3, 2);
+
+    // lower max delegations to 1
+    suite.update_max_delegations(1);
+    suite.assert_max_delegations(1);
+
+    // try to delegate to ADDR2
+    let err = suite.delegate_error(ADDR3, ADDR2, Decimal::percent(10));
+    assert_eq!(
+        err,
+        ContractError::MaxDelegationsReached { max: 1, current: 2 }
+    );
+
+    // try to update existing delegation
+    let err = suite.delegate_error(ADDR3, ADDR1, Decimal::percent(20));
+    assert_eq!(
+        err,
+        ContractError::MaxDelegationsReached { max: 1, current: 2 }
+    );
+
+    // remove a delegation
+    suite.undelegate(ADDR3, ADDR0);
+
+    // now update existing delegation
+    suite.delegate(ADDR3, ADDR1, Decimal::percent(25));
+
+    // delegations take effect on the next block
+    suite.advance_block();
+
+    suite.assert_delegations_count(ADDR3, 1);
+    suite.assert_delegation(ADDR3, ADDR1, Decimal::percent(25));
+}
+
+#[test]
 fn test_update_hook_callers() {
     let mut suite = DaoVoteDelegationTestingSuite::new().build();
     let dao = suite.dao.clone();
@@ -769,6 +838,25 @@ fn test_validate_delegation_validity_blocks_update() {
 }
 
 #[test]
+fn test_max_delegations_config() {
+    // instantiate with nothing, should set default
+    let mut suite = DaoVoteDelegationTestingSuite::new().build();
+
+    suite.assert_max_delegations(DEFAULT_MAX_DELEGATIONS);
+
+    // update config
+    suite.update_max_delegations(75);
+    suite.assert_max_delegations(75);
+
+    // instantiate with a value set
+    let suite = DaoVoteDelegationTestingSuite::new()
+        .with_max_delegations(100)
+        .build();
+
+    suite.assert_max_delegations(100);
+}
+
+#[test]
 #[should_panic(expected = "delegate already registered")]
 fn test_no_double_register() {
     let mut suite = DaoVoteDelegationTestingSuite::new().build();
@@ -927,6 +1015,7 @@ fn test_unauthorized_config_update() {
         &crate::msg::ExecuteMsg::UpdateConfig {
             vp_cap_percent: OptionalUpdate(None),
             delegation_validity_blocks: OptionalUpdate(None),
+            max_delegations: None,
         },
         &[],
     );

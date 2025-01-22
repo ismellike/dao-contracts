@@ -78,9 +78,9 @@ where
 {
     /// Adds an item to the vector at the current block height, optionally
     /// expiring in the future, returning the ID and potentially the expiration
-    /// height of the new item. This block should be greater than or equal to
-    /// the blocks all previous items were added/removed at. Pushing to the past
-    /// will lead to incorrect behavior.
+    /// height of the new item, along with the total number of items. This block
+    /// should be greater than or equal to the blocks all previous items were
+    /// added/removed at. Pushing to the past will lead to incorrect behavior.
     pub fn push(
         &self,
         store: &mut dyn Storage,
@@ -88,7 +88,7 @@ where
         data: &V,
         curr_height: u64,
         expire_in: Option<u64>,
-    ) -> StdResult<(u64, Option<u64>)> {
+    ) -> StdResult<((u64, Option<u64>), usize)> {
         // get next ID for the key, defaulting to 0
         let next_id = self
             .next_ids
@@ -116,20 +116,20 @@ where
         // update next ID
         self.next_ids.save(store, k.clone(), &(next_id + 1))?;
 
-        Ok((next_id, expiration))
+        Ok(((next_id, expiration), active.len()))
     }
 
-    /// Removes an item from the vector by ID and returns it. The block height
-    /// should be greater than or equal to the blocks all previous items were
-    /// added/removed at. Removing from the past will lead to incorrect
-    /// behavior.
+    /// Removes an item from the vector by ID and returns it, along with the
+    /// total number of items remaining. The block height should be greater than
+    /// or equal to the blocks all previous items were added/removed at.
+    /// Removing from the past will lead to incorrect behavior.
     pub fn remove(
         &self,
         store: &mut dyn Storage,
         k: &K,
         id: u64,
         curr_height: u64,
-    ) -> StdResult<V> {
+    ) -> StdResult<(V, usize)> {
         // get active list for the key
         let mut active = self.active.may_load(store, k.clone())?.unwrap_or_default();
 
@@ -141,8 +141,11 @@ where
         // save the new list
         self.active.save(store, k.clone(), &active, curr_height)?;
 
-        // load and return the item
-        self.load_item(store, k, id)
+        // load the item
+        let item = self.load_item(store, k, id)?;
+
+        // return the item and the number of items remaining
+        Ok((item, active.len()))
     }
 
     /// Loads paged items at the given block height that are not expired. This

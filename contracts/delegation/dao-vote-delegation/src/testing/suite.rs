@@ -4,6 +4,8 @@ use cosmwasm_std::{Addr, Decimal, Uint128};
 use dao_interface::helpers::{OptionalUpdate, Update};
 use dao_testing::{Cw4TestDao, DaoTestingSuite, DaoTestingSuiteBase};
 
+use crate::ContractError;
+
 use super::tests::dao_vote_delegation_contract;
 
 pub struct DaoVoteDelegationTestingSuite {
@@ -13,6 +15,7 @@ pub struct DaoVoteDelegationTestingSuite {
     // initial config
     vp_cap_percent: Option<Decimal>,
     delegation_validity_blocks: Option<u64>,
+    max_delegations: Option<u64>,
 
     /// cw4-group voting DAO
     pub dao: Cw4TestDao,
@@ -57,6 +60,7 @@ impl DaoVoteDelegationTestingSuite {
 
             vp_cap_percent: None,
             delegation_validity_blocks: None,
+            max_delegations: None,
 
             dao,
             members,
@@ -76,12 +80,18 @@ impl DaoVoteDelegationTestingSuite {
         self
     }
 
+    pub fn with_max_delegations(mut self, max_delegations: u64) -> Self {
+        self.max_delegations = Some(max_delegations);
+        self
+    }
+
     pub fn build(mut self) -> Self {
         let code_id = self.delegation_code_id;
         let core_addr = self.dao.core_addr.clone();
         let group_addr = self.dao.x.group_addr.to_string();
         let vp_cap_percent = self.vp_cap_percent;
         let delegation_validity_blocks = self.delegation_validity_blocks;
+        let max_delegations = self.max_delegations;
 
         self.delegation_addr = self.instantiate(
             code_id,
@@ -92,6 +102,7 @@ impl DaoVoteDelegationTestingSuite {
                 no_sync_proposal_modules: None,
                 vp_cap_percent,
                 delegation_validity_blocks,
+                max_delegations,
             },
             &[],
             "delegation",
@@ -170,6 +181,25 @@ impl DaoVoteDelegationTestingSuite {
         );
     }
 
+    /// create or update a delegation and expect an error
+    pub fn delegate_error(
+        &mut self,
+        delegator: impl Into<String>,
+        delegate: impl Into<String>,
+        percent: Decimal,
+    ) -> ContractError {
+        let delegation_addr = self.delegation_addr.clone();
+        self.execute_smart_err(
+            delegator,
+            delegation_addr,
+            &crate::msg::ExecuteMsg::Delegate {
+                delegate: delegate.into(),
+                percent,
+            },
+            &[],
+        )
+    }
+
     /// revoke a delegation
     pub fn undelegate(&mut self, delegator: impl Into<String>, delegate: impl Into<String>) {
         let delegation_addr = self.delegation_addr.clone();
@@ -223,6 +253,7 @@ impl DaoVoteDelegationTestingSuite {
                     vp_cap_percent.map_or(Update::Clear, Update::Set),
                 )),
                 delegation_validity_blocks: OptionalUpdate(None),
+                max_delegations: None,
             },
             &[],
         );
@@ -240,6 +271,23 @@ impl DaoVoteDelegationTestingSuite {
                 delegation_validity_blocks: OptionalUpdate(Some(
                     delegation_validity_blocks.map_or(Update::Clear, Update::Set),
                 )),
+                max_delegations: None,
+            },
+            &[],
+        );
+    }
+
+    /// update max delegations
+    pub fn update_max_delegations(&mut self, max_delegations: u64) {
+        let core_addr = self.dao.core_addr.clone();
+        let delegation_addr = self.delegation_addr.clone();
+        self.execute_smart_ok(
+            core_addr,
+            delegation_addr,
+            &crate::msg::ExecuteMsg::UpdateConfig {
+                vp_cap_percent: OptionalUpdate(None),
+                delegation_validity_blocks: OptionalUpdate(None),
+                max_delegations: Some(max_delegations),
             },
             &[],
         );
@@ -340,6 +388,13 @@ impl DaoVoteDelegationTestingSuite {
                 &self.delegation_addr,
                 &crate::msg::QueryMsg::VotingPowerHookCallers { start_after, limit },
             )
+            .unwrap()
+    }
+
+    /// get the config
+    pub fn config(&self) -> dao_voting::delegation::Config {
+        self.querier()
+            .query_wasm_smart(&self.delegation_addr, &crate::msg::QueryMsg::Config {})
             .unwrap()
     }
 }
@@ -450,5 +505,11 @@ impl DaoVoteDelegationTestingSuite {
             start_height,
         );
         assert_eq!(udvp.effective, effective.into());
+    }
+
+    /// assert that the max delegations is set
+    pub fn assert_max_delegations(&self, expected: u64) {
+        let config = self.config();
+        assert_eq!(config.max_delegations, expected);
     }
 }

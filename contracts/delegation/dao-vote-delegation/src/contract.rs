@@ -42,6 +42,11 @@ pub(crate) const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const DEFAULT_LIMIT: u32 = 10;
 pub const MAX_LIMIT: u32 = 50;
 
+/// in tests on Neutron, with a block max gas of 30M (which is one of the lowest
+/// gas limits on any chain), we found that 50 delegations is a safe upper
+/// bound, so this defaults to 50.
+pub const DEFAULT_MAX_DELEGATIONS: u64 = 50;
+
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
     deps: DepsMut,
@@ -72,6 +77,7 @@ pub fn instantiate(
         deps.storage,
         &Config {
             delegation_validity_blocks: msg.delegation_validity_blocks,
+            max_delegations: msg.max_delegations.unwrap_or(DEFAULT_MAX_DELEGATIONS),
         },
     )?;
     VP_CAP_PERCENT.save(deps.storage, &msg.vp_cap_percent, env.block.height)?;
@@ -116,7 +122,15 @@ pub fn execute(
         ExecuteMsg::UpdateConfig {
             vp_cap_percent,
             delegation_validity_blocks,
-        } => execute_update_config(deps, env, info, vp_cap_percent, delegation_validity_blocks),
+            max_delegations,
+        } => execute_update_config(
+            deps,
+            env,
+            info,
+            vp_cap_percent,
+            delegation_validity_blocks,
+            max_delegations,
+        ),
         ExecuteMsg::StakeChangeHook(msg) => execute_stake_changed(deps, env, info, msg),
         ExecuteMsg::NftStakeChangeHook(msg) => execute_nft_stake_changed(deps, env, info, msg),
         ExecuteMsg::MemberChangedHook(msg) => execute_membership_changed(deps, env, info, msg),
@@ -251,11 +265,21 @@ fn execute_delegate(
         )?;
 
         // replace delegation with updated percent
-        DELEGATIONS.remove(deps.storage, &delegator, existing_id, env.block.height)?;
+        let (_, total_minus_one) =
+            DELEGATIONS.remove(deps.storage, &delegator, existing_id, env.block.height)?;
+
+        // don't let them update if they are over the max, instead requiring
+        // them to remove existing delegations before updating any
+        if total_minus_one + 1 > config.max_delegations as usize {
+            return Err(ContractError::MaxDelegationsReached {
+                max: config.max_delegations,
+                current: total_minus_one + 1,
+            });
+        }
 
         existing_delegation.percent = percent;
 
-        let new_delegation_entry = DELEGATIONS.push(
+        let (new_delegation_entry, _) = DELEGATIONS.push(
             deps.storage,
             &delegator,
             &existing_delegation,
@@ -269,7 +293,7 @@ fn execute_delegate(
         new_total_percent_delegated = current_percent_delegated.checked_add(percent)?;
 
         // add new delegation
-        let new_delegation_entry = DELEGATIONS.push(
+        let (new_delegation_entry, new_total) = DELEGATIONS.push(
             deps.storage,
             &delegator,
             &Delegation {
@@ -279,6 +303,15 @@ fn execute_delegate(
             env.block.height,
             config.delegation_validity_blocks,
         )?;
+
+        // prevent new delegations if they are over the max
+        if new_total > config.max_delegations as usize {
+            return Err(ContractError::MaxDelegationsReached {
+                max: config.max_delegations,
+                current: new_total - 1,
+            });
+        }
+
         DELEGATION_ENTRIES.save(deps.storage, (&delegator, &delegate), &new_delegation_entry)?;
     }
 
@@ -330,7 +363,8 @@ fn execute_undelegate(
     let current_percent_delegated = PERCENT_DELEGATED.load(deps.storage, &delegator)?;
 
     // retrieve and remove delegation
-    let delegation = DELEGATIONS.remove(deps.storage, &delegator, existing_id, env.block.height)?;
+    let (delegation, _) =
+        DELEGATIONS.remove(deps.storage, &delegator, existing_id, env.block.height)?;
     DELEGATION_ENTRIES.remove(deps.storage, (&delegator, &delegate));
 
     // update delegator's percent delegated
@@ -424,6 +458,7 @@ fn execute_update_config(
     info: MessageInfo,
     vp_cap_percent: OptionalUpdate<Decimal>,
     delegation_validity_blocks: OptionalUpdate<u64>,
+    max_delegations: Option<u64>,
 ) -> Result<Response, ContractError> {
     nonpayable(&info)?;
 
@@ -452,6 +487,10 @@ fn execute_update_config(
 
             Ok(())
         })?;
+
+        if let Some(value) = max_delegations {
+            config.max_delegations = value;
+        }
 
         Ok(config)
     })?;
@@ -498,6 +537,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::VotingPowerHookCallers { start_after, limit } => Ok(to_json_binary(
             &query_voting_power_hook_callers(deps, start_after, limit)?,
         )?),
+        QueryMsg::Config {} => Ok(to_json_binary(&query_config(deps)?)?),
     }
 }
 
@@ -650,6 +690,11 @@ fn query_voting_power_hook_callers(
         limit,
         Order::Ascending,
     )
+}
+
+fn query_config(deps: Deps) -> StdResult<Config> {
+    let config = CONFIG.load(deps.storage)?;
+    Ok(config)
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
