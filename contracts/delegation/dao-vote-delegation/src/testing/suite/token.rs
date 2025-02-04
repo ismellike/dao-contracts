@@ -1,6 +1,7 @@
 use std::ops::{Deref, DerefMut};
 
-use cosmwasm_std::Decimal;
+use cosmwasm_std::{coins, Decimal, Uint128};
+use cw_multi_test::{BankSudo, SudoMsg};
 use dao_interface::token::InitialBalance;
 use dao_testing::{DaoTestingSuite, TokenTestDao};
 
@@ -111,5 +112,43 @@ impl TokenDaoVoteDelegationTestingSuite {
 
         // set the delegation module for all proposal modules
         self.set_delegation_module(&dao, &delegation_addr);
+    }
+
+    /// mint tokens
+    pub fn mint(&mut self, recipient: impl Into<String>, amount: impl Into<u128>) {
+        let denom = self.dao.x.denom.clone();
+        self.app
+            .sudo(SudoMsg::Bank({
+                BankSudo::Mint {
+                    to_address: recipient.into(),
+                    amount: coins(amount.into(), denom),
+                }
+            }))
+            .unwrap();
+    }
+
+    /// stake tokens
+    pub fn stake(&mut self, staker: impl Into<String>, amount: impl Into<u128>) {
+        let voting_module_addr = self.dao.voting_module_addr.clone();
+        let denom = self.dao.x.denom.clone();
+        self.execute_smart_ok(
+            staker,
+            voting_module_addr,
+            &dao_voting_token_staked::msg::ExecuteMsg::Stake {},
+            &coins(amount.into(), denom),
+        );
+    }
+
+    /// unstake tokens
+    pub fn unstake(&mut self, staker: impl Into<String>, amount: impl Into<Uint128>) {
+        let voting_module_addr = self.dao.voting_module_addr.clone();
+        self.execute_smart_ok(
+            staker,
+            &voting_module_addr,
+            &dao_voting_token_staked::msg::ExecuteMsg::Unstake {
+                amount: amount.into(),
+            },
+            &[],
+        );
     }
 }

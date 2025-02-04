@@ -1071,6 +1071,10 @@ fn test_migrate() {
     assert_eq!(version.version, CONTRACT_VERSION);
 }
 
+/// this test does not actually test gas limits, since cw-multi-test does not
+/// run a real chain, but it is demonstrative of what behaviors may lead to high
+/// gas usage. this test is replicated in the DAO DAO UI codebase using an
+/// actual chain with gas limits.
 #[test]
 fn test_vp_cap_update_token_dao() {
     let mut suite = TokenDaoVoteDelegationTestingSuite::new()
@@ -1253,4 +1257,193 @@ fn test_vp_cap_update_token_dao() {
         p1.start_height,
         total_vp_except_addr0,
     );
+}
+
+#[test]
+fn test_gas_limits() {
+    let mut suite = TokenDaoVoteDelegationTestingSuite::new()
+        .with_max_delegations(100)
+        .build();
+    let dao = suite.dao.clone();
+
+    // unstake all tokens for initial members
+    for member in suite.members.clone() {
+        suite.unstake(member.address, member.amount);
+    }
+
+    // mint 2,000 tokens and stake half for each of 1,000 members
+    let members = 1_000u128;
+    let initial_balance = 2_000u128;
+    let initial_staked = initial_balance / 2;
+    for i in 0..members {
+        suite.mint(format!("member_{}", i), initial_balance);
+        suite.stake(format!("member_{}", i), initial_staked);
+    }
+
+    // staking takes effect at the next block
+    suite.advance_block();
+
+    let total_vp: dao_interface::voting::TotalPowerAtHeightResponse = suite
+        .querier()
+        .query_wasm_smart(
+            &suite.dao.core_addr,
+            &dao_voting_token_staked::msg::QueryMsg::TotalPowerAtHeight { height: None },
+        )
+        .unwrap();
+    assert_eq!(total_vp.power, Uint128::from(initial_staked * members));
+
+    // register first 100 members as delegates, and make delegator the first
+    // non-delegate
+    let delegates = 100u128;
+    let delegator = format!("member_{}", delegates);
+    for i in 0..delegates {
+        suite.register(format!("member_{}", i));
+    }
+
+    // delegations take effect on the next block
+    suite.advance_block();
+
+    // check that the delegations are registered
+    suite.assert_delegates_count(100);
+
+    // TEST 1: Update voting power for a delegator, which loops through all
+    // delegates and updates their delegated voting power. This should cause a
+    // gas error if there are too many delegates to update.
+
+    // delegate to each of the delegates, rounding to 5 decimal places to avoid
+    // infinitely repeating decimals
+    let percent_delegated = Decimal::from_ratio(100_000u128 / delegates / 3, 100_000u128);
+    for i in 0..delegates {
+        suite.delegate(&delegator, format!("member_{}", i), percent_delegated);
+    }
+
+    // delegations take effect on the next block
+    suite.advance_block();
+
+    // check that the voting power is distributed correctly
+    for delegate in suite.delegates(None, None) {
+        assert_eq!(
+            delegate.power,
+            Uint128::from(initial_staked).mul_floor(percent_delegated)
+        );
+    }
+
+    // stake the other half of the tokens for the delegator, which should loop
+    // through and update all delegations
+    suite.stake(&delegator, initial_balance - initial_staked);
+
+    // delegations take effect on the next block
+    suite.advance_block();
+
+    // check that the voting power is distributed correctly
+    for delegate in suite.delegates(None, None) {
+        assert_eq!(
+            delegate.power,
+            Uint128::from(initial_balance).mul_floor(percent_delegated)
+        );
+    }
+
+    // undo the half stake so that all members have the same voting power again
+    suite.unstake(&delegator, initial_balance - initial_staked);
+
+    // delegations take effect on the next block
+    suite.advance_block();
+
+    // TEST 2: Override all delegates' votes, which loops through all delegates
+    // and updates both their ballots and unvoted delegated voting power on that
+    // proposal. This should cause a gas error if there are too many delegates
+    // to update.
+
+    let (proposal_module, proposal_id, proposal) =
+        suite.propose_single_choice(&dao, "member_0", "test proposal", vec![]);
+
+    // ensure that the unvoted delegated voting power is equal to the total
+    // delegated voting power, since the delegator has not voted yet
+    for i in 0..delegates {
+        let vp = Uint128::from(initial_staked).mul_floor(percent_delegated);
+        suite.assert_effective_udvp(
+            format!("member_{}", i),
+            &proposal_module,
+            proposal_id,
+            proposal.start_height,
+            vp,
+        );
+        suite.assert_total_udvp(
+            format!("member_{}", i),
+            &proposal_module,
+            proposal_id,
+            proposal.start_height,
+            vp,
+        );
+    }
+
+    // all delegates vote on the proposal
+    for i in 0..delegates {
+        suite.vote_single_choice(
+            &dao,
+            format!("member_{}", i),
+            proposal_id,
+            dao_voting::voting::Vote::Yes,
+        );
+    }
+
+    // verify votes tallied with the delegates' personal voting power and
+    // delegated voting power
+    suite.assert_single_choice_votes_count(
+        &proposal_module,
+        proposal_id,
+        dao_voting::voting::Vote::Yes,
+        // compute delegated voting power
+        Uint128::from(initial_staked)
+            .mul_floor(percent_delegated)
+            // add personal voting power
+            .checked_add(Uint128::from(initial_staked))
+            .unwrap()
+            // multiply by number of delegates
+            .checked_mul(Uint128::from(delegates))
+            .unwrap(),
+    );
+
+    // delegator overrides all delegates' votes, which should update all
+    // delegate's ballots and unvoted delegated voting power on the proposal
+    suite.vote_single_choice(&dao, delegator, proposal_id, dao_voting::voting::Vote::No);
+
+    // verify vote tallies have been updated with the delegator's vote, removing
+    // the delegator's delegated voting power from the delegates' yes votes and
+    // adding the delegator's full voting power to the no votes
+    suite.assert_single_choice_votes_count(
+        &proposal_module,
+        proposal_id,
+        dao_voting::voting::Vote::Yes,
+        // add personal voting power
+        Uint128::from(initial_staked)
+            // multiply by number of delegates
+            .checked_mul(Uint128::from(delegates))
+            .unwrap(),
+    );
+    suite.assert_single_choice_votes_count(
+        &proposal_module,
+        proposal_id,
+        dao_voting::voting::Vote::No,
+        Uint128::from(initial_staked),
+    );
+
+    // verify that the unvoted delegated voting power is 0, since the delegator
+    // voted
+    for i in 0..delegates {
+        suite.assert_effective_udvp(
+            format!("member_{}", i),
+            &proposal_module,
+            proposal_id,
+            proposal.start_height,
+            0u128,
+        );
+        suite.assert_total_udvp(
+            format!("member_{}", i),
+            &proposal_module,
+            proposal_id,
+            proposal.start_height,
+            0u128,
+        );
+    }
 }

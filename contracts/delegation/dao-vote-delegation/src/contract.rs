@@ -40,7 +40,6 @@ pub(crate) const CONTRACT_NAME: &str = "crates.io:dao-vote-delegation";
 pub(crate) const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub const DEFAULT_LIMIT: u32 = 10;
-pub const MAX_LIMIT: u32 = 50;
 
 /// in tests on Neutron, with a block max gas of 30M (which is one of the lowest
 /// gas limits on any chain), we found that 50 delegations is a safe upper
@@ -573,7 +572,7 @@ fn query_delegates(
     start_after: Option<String>,
     limit: Option<u32>,
 ) -> StdResult<DelegatesResponse> {
-    let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
+    let limit = limit.unwrap_or(DEFAULT_LIMIT) as usize;
 
     let start = maybe_addr(deps.api, start_after)?.map(Bound::exclusive);
 
