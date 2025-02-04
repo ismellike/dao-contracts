@@ -379,7 +379,7 @@ impl DaoVoteDelegationTestingSuiteBase {
 
     /// assert that there are N delegates
     pub fn assert_delegates_count(&self, count: u32) {
-        let delegates = self.delegates(None, None);
+        let delegates = self.delegates(None, Some(count));
         assert_eq!(delegates.len() as u32, count);
     }
 
