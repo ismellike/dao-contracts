@@ -6,14 +6,12 @@ crates.io](https://img.shields.io/crates/v/dao-vote-delegation.svg?logo=rust)](h
 
 The `dao-vote-delegation` contract allows members of a DAO to delegate their
 voting power to other members of the DAO who have registered as delegates. It
-works in conjunction with voting and proposal modules, as well as the rewards
-distributor, to offer a comprehensive delegation system for DAOs that supports
-the following features:
+works in conjunction with voting and proposal modules to offer a comprehensive
+delegation system for DAOs that supports the following features:
 
 - Fractional delegation of voting power on a per-proposal-module basis.
 - Delegate votes that can be overridden on a per-proposal basis by each
   delegator.
-- Delegate reward commission.
 
 ## Instantiation and Setup
 
