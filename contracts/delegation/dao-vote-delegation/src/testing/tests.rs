@@ -1071,6 +1071,58 @@ fn test_migrate() {
     assert_eq!(version.version, CONTRACT_VERSION);
 }
 
+#[test]
+fn test_change_member_vp() {
+    let mut suite = Cw4DaoVoteDelegationTestingSuite::new().build();
+
+    suite.register(ADDR0);
+    suite.delegate(ADDR1, ADDR0, Decimal::percent(100));
+    suite.advance_block();
+
+    // ensure all of ADDR0's voting power is delegated to ADDR1
+    let initial_vp = suite.members[1].weight;
+    suite.assert_delegate_total_delegated_vp(ADDR0, initial_vp);
+
+    // double ADDR0's voting power
+    let new_vp = initial_vp * 2;
+    let dao_core_addr = suite.dao.core_addr.clone();
+    let group_addr = suite.dao.x.group_addr.clone();
+    suite.execute_smart_ok(
+        &dao_core_addr,
+        &group_addr,
+        &cw4_group::msg::ExecuteMsg::UpdateMembers {
+            add: vec![cw4::Member {
+                addr: ADDR1.to_string(),
+                weight: new_vp,
+            }],
+            remove: vec![],
+        },
+        &[],
+    );
+    suite.advance_block();
+
+    // ensure all of ADDR0's new voting power is now delegated to ADDR1
+    suite.assert_delegate_total_delegated_vp(ADDR0, new_vp);
+}
+
+#[test]
+fn test_auto_unregister() {
+    let mut suite = TokenDaoVoteDelegationTestingSuite::new().build();
+
+    suite.register(ADDR0);
+
+    suite.advance_block();
+
+    suite.assert_delegate_registered(ADDR0, None);
+
+    // unstake all tokens, which should automatically unregister the delegate
+    suite.unstake(ADDR0, suite.members[0].amount);
+
+    suite.advance_block();
+
+    suite.assert_delegate_not_registered(ADDR0, None);
+}
+
 /// this test does not actually test gas limits, since cw-multi-test does not
 /// run a real chain, but it is demonstrative of what behaviors may lead to high
 /// gas usage. this test is replicated in the DAO DAO UI codebase using an
