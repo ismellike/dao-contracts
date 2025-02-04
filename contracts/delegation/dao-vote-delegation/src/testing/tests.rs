@@ -11,7 +11,9 @@ use crate::{
     ContractError,
 };
 
-use super::*;
+use super::suite::{
+    cw4::Cw4DaoVoteDelegationTestingSuite, token::TokenDaoVoteDelegationTestingSuite,
+};
 
 pub fn dao_vote_delegation_contract() -> Box<dyn Contract<Empty>> {
     let contract = ContractWrapper::new(
@@ -25,7 +27,7 @@ pub fn dao_vote_delegation_contract() -> Box<dyn Contract<Empty>> {
 
 #[test]
 fn test_simple() {
-    let mut suite = DaoVoteDelegationTestingSuite::new()
+    let mut suite = Cw4DaoVoteDelegationTestingSuite::new()
         .with_vp_cap_percent(Decimal::percent(50))
         .with_delegation_validity_blocks(10)
         .build();
@@ -220,7 +222,7 @@ fn test_simple() {
 
 #[test]
 fn test_vp_cap_update() {
-    let mut suite = DaoVoteDelegationTestingSuite::new()
+    let mut suite = Cw4DaoVoteDelegationTestingSuite::new()
         .with_vp_cap_percent(Decimal::percent(50))
         .with_delegation_validity_blocks(10)
         .build();
@@ -377,7 +379,7 @@ fn test_vp_cap_update() {
 
 #[test]
 fn test_expiration_update() {
-    let mut suite = DaoVoteDelegationTestingSuite::new()
+    let mut suite = Cw4DaoVoteDelegationTestingSuite::new()
         .with_delegation_validity_blocks(10)
         .build();
 
@@ -452,7 +454,7 @@ fn test_expiration_update() {
 
 #[test]
 fn test_max_delegations() {
-    let mut suite = DaoVoteDelegationTestingSuite::new()
+    let mut suite = Cw4DaoVoteDelegationTestingSuite::new()
         .with_max_delegations(2)
         .build();
 
@@ -518,7 +520,7 @@ fn test_max_delegations() {
 
 #[test]
 fn test_update_hook_callers() {
-    let mut suite = DaoVoteDelegationTestingSuite::new().build();
+    let mut suite = Cw4DaoVoteDelegationTestingSuite::new().build();
     let dao = suite.dao.clone();
 
     // ensure setup correctly
@@ -575,7 +577,7 @@ fn test_update_hook_callers() {
 
 #[test]
 fn test_vote_with_override() {
-    let mut suite = DaoVoteDelegationTestingSuite::new().build();
+    let mut suite = Cw4DaoVoteDelegationTestingSuite::new().build();
     let dao = suite.dao.clone();
 
     // register ADDR0 and ADDR3 as delegates
@@ -695,7 +697,7 @@ fn test_vote_with_override() {
 
 #[test]
 fn test_overrideable_vote_doesnt_end_proposal_early() {
-    let mut suite = DaoVoteDelegationTestingSuite::new().build();
+    let mut suite = Cw4DaoVoteDelegationTestingSuite::new().build();
     let dao = suite.dao.clone();
 
     // register ADDR0 and ADDR1 as delegates
@@ -795,7 +797,7 @@ fn test_overrideable_vote_doesnt_end_proposal_early() {
 
 #[test]
 fn test_allow_register_after_unregister_same_block() {
-    let mut suite = DaoVoteDelegationTestingSuite::new().build();
+    let mut suite = Cw4DaoVoteDelegationTestingSuite::new().build();
 
     suite.register(ADDR0);
     suite.unregister(ADDR0);
@@ -808,7 +810,7 @@ fn test_allow_register_after_unregister_same_block() {
 
 #[test]
 fn test_allow_register_after_unregister_next_block() {
-    let mut suite = DaoVoteDelegationTestingSuite::new().build();
+    let mut suite = Cw4DaoVoteDelegationTestingSuite::new().build();
 
     suite.register(ADDR0);
     suite.advance_block();
@@ -824,7 +826,7 @@ fn test_allow_register_after_unregister_next_block() {
 #[test]
 #[should_panic(expected = "invalid delegation validity blocks: provided 1, minimum 2")]
 fn test_validate_delegation_validity_blocks() {
-    DaoVoteDelegationTestingSuite::new()
+    Cw4DaoVoteDelegationTestingSuite::new()
         .with_delegation_validity_blocks(1)
         .build();
 }
@@ -832,7 +834,7 @@ fn test_validate_delegation_validity_blocks() {
 #[test]
 #[should_panic(expected = "invalid delegation validity blocks: provided 1, minimum 2")]
 fn test_validate_delegation_validity_blocks_update() {
-    let mut suite = DaoVoteDelegationTestingSuite::new().build();
+    let mut suite = Cw4DaoVoteDelegationTestingSuite::new().build();
 
     suite.update_delegation_validity_blocks(Some(1));
 }
@@ -840,7 +842,7 @@ fn test_validate_delegation_validity_blocks_update() {
 #[test]
 fn test_max_delegations_config() {
     // instantiate with nothing, should set default
-    let mut suite = DaoVoteDelegationTestingSuite::new().build();
+    let mut suite = Cw4DaoVoteDelegationTestingSuite::new().build();
 
     suite.assert_max_delegations(DEFAULT_MAX_DELEGATIONS);
 
@@ -849,7 +851,7 @@ fn test_max_delegations_config() {
     suite.assert_max_delegations(75);
 
     // instantiate with a value set
-    let suite = DaoVoteDelegationTestingSuite::new()
+    let suite = Cw4DaoVoteDelegationTestingSuite::new()
         .with_max_delegations(100)
         .build();
 
@@ -859,7 +861,7 @@ fn test_max_delegations_config() {
 #[test]
 #[should_panic(expected = "delegate already registered")]
 fn test_no_double_register() {
-    let mut suite = DaoVoteDelegationTestingSuite::new().build();
+    let mut suite = Cw4DaoVoteDelegationTestingSuite::new().build();
 
     suite.register(ADDR0);
     suite.register(ADDR0);
@@ -868,7 +870,7 @@ fn test_no_double_register() {
 #[test]
 #[should_panic(expected = "no voting power")]
 fn test_no_vp_register() {
-    let mut suite = DaoVoteDelegationTestingSuite::new().build();
+    let mut suite = Cw4DaoVoteDelegationTestingSuite::new().build();
 
     suite.register("non_member");
 }
@@ -876,7 +878,7 @@ fn test_no_vp_register() {
 #[test]
 #[should_panic(expected = "cannot register as a delegate with existing delegations")]
 fn test_cannot_register_with_delegations_same_block() {
-    let mut suite = DaoVoteDelegationTestingSuite::new().build();
+    let mut suite = Cw4DaoVoteDelegationTestingSuite::new().build();
 
     suite.register(ADDR0);
     suite.delegate(ADDR1, ADDR0, Decimal::percent(100));
@@ -886,7 +888,7 @@ fn test_cannot_register_with_delegations_same_block() {
 #[test]
 #[should_panic(expected = "cannot register as a delegate with existing delegations")]
 fn test_cannot_register_with_delegations_next_block() {
-    let mut suite = DaoVoteDelegationTestingSuite::new().build();
+    let mut suite = Cw4DaoVoteDelegationTestingSuite::new().build();
 
     suite.register(ADDR0);
     suite.delegate(ADDR1, ADDR0, Decimal::percent(100));
@@ -897,7 +899,7 @@ fn test_cannot_register_with_delegations_next_block() {
 #[test]
 #[should_panic(expected = "delegate not registered")]
 fn test_cannot_unregister_unregistered() {
-    let mut suite = DaoVoteDelegationTestingSuite::new().build();
+    let mut suite = Cw4DaoVoteDelegationTestingSuite::new().build();
 
     suite.unregister(ADDR0);
 }
@@ -905,7 +907,7 @@ fn test_cannot_unregister_unregistered() {
 #[test]
 #[should_panic(expected = "invalid voting power percent")]
 fn test_cannot_delegate_zero_percent() {
-    let mut suite = DaoVoteDelegationTestingSuite::new().build();
+    let mut suite = Cw4DaoVoteDelegationTestingSuite::new().build();
 
     suite.register(ADDR0);
     suite.delegate(ADDR1, ADDR0, Decimal::zero());
@@ -914,7 +916,7 @@ fn test_cannot_delegate_zero_percent() {
 #[test]
 #[should_panic(expected = "invalid voting power percent")]
 fn test_cannot_delegate_more_than_100_percent() {
-    let mut suite = DaoVoteDelegationTestingSuite::new().build();
+    let mut suite = Cw4DaoVoteDelegationTestingSuite::new().build();
 
     suite.register(ADDR0);
     suite.delegate(ADDR1, ADDR0, Decimal::percent(101));
@@ -923,7 +925,7 @@ fn test_cannot_delegate_more_than_100_percent() {
 #[test]
 #[should_panic(expected = "delegates cannot delegate to others")]
 fn test_delegates_cannot_delegate() {
-    let mut suite = DaoVoteDelegationTestingSuite::new().build();
+    let mut suite = Cw4DaoVoteDelegationTestingSuite::new().build();
 
     suite.register(ADDR0);
     suite.register(ADDR1);
@@ -933,7 +935,7 @@ fn test_delegates_cannot_delegate() {
 #[test]
 #[should_panic(expected = "delegate not registered")]
 fn test_cannot_delegate_unregistered() {
-    let mut suite = DaoVoteDelegationTestingSuite::new().build();
+    let mut suite = Cw4DaoVoteDelegationTestingSuite::new().build();
 
     suite.delegate(ADDR0, ADDR1, Decimal::percent(100));
 }
@@ -941,7 +943,7 @@ fn test_cannot_delegate_unregistered() {
 #[test]
 #[should_panic(expected = "no voting power")]
 fn test_cannot_delegate_no_vp() {
-    let mut suite = DaoVoteDelegationTestingSuite::new().build();
+    let mut suite = Cw4DaoVoteDelegationTestingSuite::new().build();
 
     suite.register(ADDR0);
     suite.delegate("not_member", ADDR0, Decimal::percent(100));
@@ -950,7 +952,7 @@ fn test_cannot_delegate_no_vp() {
 #[test]
 #[should_panic(expected = "cannot delegate more than 100% (current: 50%, attempt: 101%)")]
 fn test_cannot_delegate_more_than_100() {
-    let mut suite = DaoVoteDelegationTestingSuite::new().build();
+    let mut suite = Cw4DaoVoteDelegationTestingSuite::new().build();
 
     suite.register(ADDR0);
     suite.register(ADDR1);
@@ -961,14 +963,14 @@ fn test_cannot_delegate_more_than_100() {
 #[test]
 #[should_panic(expected = "delegation does not exist")]
 fn test_cannot_undelegate_nonexistent() {
-    let mut suite = DaoVoteDelegationTestingSuite::new().build();
+    let mut suite = Cw4DaoVoteDelegationTestingSuite::new().build();
 
     suite.undelegate(ADDR0, ADDR1);
 }
 
 #[test]
 fn test_delegate_undelegate_same_block() {
-    let mut suite = DaoVoteDelegationTestingSuite::new().build();
+    let mut suite = Cw4DaoVoteDelegationTestingSuite::new().build();
 
     suite.register(ADDR0);
     suite.delegate(ADDR1, ADDR0, Decimal::percent(100));
@@ -978,7 +980,7 @@ fn test_delegate_undelegate_same_block() {
 #[test]
 #[should_panic(expected = "delegation does not exist")]
 fn test_cannot_undelegate_twice() {
-    let mut suite = DaoVoteDelegationTestingSuite::new().build();
+    let mut suite = Cw4DaoVoteDelegationTestingSuite::new().build();
 
     suite.register(ADDR0);
     suite.delegate(ADDR1, ADDR0, Decimal::percent(100));
@@ -989,7 +991,7 @@ fn test_cannot_undelegate_twice() {
 #[test]
 #[should_panic(expected = "unauthorized")]
 fn test_unauthorized_update_voting_power_hook_callers() {
-    let mut suite = DaoVoteDelegationTestingSuite::new().build();
+    let mut suite = Cw4DaoVoteDelegationTestingSuite::new().build();
     let delegation_addr = suite.delegation_addr.clone();
 
     suite.execute_smart_ok(
@@ -1006,7 +1008,7 @@ fn test_unauthorized_update_voting_power_hook_callers() {
 #[test]
 #[should_panic(expected = "unauthorized")]
 fn test_unauthorized_config_update() {
-    let mut suite = DaoVoteDelegationTestingSuite::new().build();
+    let mut suite = Cw4DaoVoteDelegationTestingSuite::new().build();
     let delegation_addr = suite.delegation_addr.clone();
 
     suite.execute_smart_ok(
@@ -1067,4 +1069,188 @@ fn test_migrate() {
 
     assert_eq!(version.contract, CONTRACT_NAME);
     assert_eq!(version.version, CONTRACT_VERSION);
+}
+
+#[test]
+fn test_vp_cap_update_token_dao() {
+    let mut suite = TokenDaoVoteDelegationTestingSuite::new()
+        .with_vp_cap_percent(Decimal::percent(50))
+        .with_delegation_validity_blocks(10)
+        .with_max_delegations(100)
+        .build();
+    let dao = suite.dao.clone();
+
+    // register ADDR0 as a delegate
+    suite.register(ADDR0);
+
+    // delegate 100% of every other member's voting power to ADDR0
+    for member in suite.members.clone() {
+        if member.address != ADDR0 {
+            suite.delegate(member.address, ADDR0, Decimal::percent(100));
+        }
+    }
+
+    // delegations take effect on the next block
+    suite.advance_block();
+
+    let total_vp_except_addr0 = suite
+        .members
+        .iter()
+        .map(|m| {
+            if m.address == ADDR0 {
+                0
+            } else {
+                m.amount.into()
+            }
+        })
+        .sum::<u128>();
+    suite.assert_delegate_total_delegated_vp(ADDR0, total_vp_except_addr0);
+
+    // propose a proposal
+    let (proposal_module, id1, p1) =
+        suite.propose_single_choice(&dao, ADDR0, "test proposal", vec![]);
+
+    // ensure delegation is correctly applied to proposal and that VP cap is
+    // applied correctly. effective should be 50% of total voting power, and
+    // total should be everything that's delegated to ADDR0
+    suite.assert_effective_udvp(
+        ADDR0,
+        &proposal_module,
+        id1,
+        p1.start_height,
+        // VP cap is set to 50% of total voting power
+        suite
+            .members
+            .iter()
+            .map(|m| m.amount)
+            .sum::<Uint128>()
+            .mul_floor(Decimal::percent(50)),
+    );
+    suite.assert_total_udvp(
+        ADDR0,
+        &proposal_module,
+        id1,
+        p1.start_height,
+        total_vp_except_addr0,
+    );
+
+    // change VP cap to 30% of total
+    suite.update_vp_cap_percent(Some(Decimal::percent(30)));
+    // updates take effect on the next block
+    suite.advance_block();
+
+    // propose another proposal
+    let (_, id2, p2) = suite.propose_single_choice(&dao, ADDR0, "test proposal", vec![]);
+
+    // ensure delegation is correctly applied to proposal and that VP cap is
+    // applied correctly. effective should be 30% of total voting power, and
+    // total should still be everything that's delegated to ADDR0
+    suite.assert_effective_udvp(
+        ADDR0,
+        &proposal_module,
+        id2,
+        p2.start_height,
+        // VP cap is set to 30% of total voting power
+        suite
+            .members
+            .iter()
+            .map(|m| m.amount)
+            .sum::<Uint128>()
+            .mul_floor(Decimal::percent(30)),
+    );
+    suite.assert_total_udvp(
+        ADDR0,
+        &proposal_module,
+        id2,
+        p2.start_height,
+        total_vp_except_addr0,
+    );
+
+    // old proposal should still use old VP cap
+    suite.assert_effective_udvp(
+        ADDR0,
+        &proposal_module,
+        id1,
+        p1.start_height,
+        // VP cap is set to 50% of total voting power
+        suite
+            .members
+            .iter()
+            .map(|m| m.amount)
+            .sum::<Uint128>()
+            .mul_floor(Decimal::percent(50)),
+    );
+    suite.assert_total_udvp(
+        ADDR0,
+        &proposal_module,
+        id1,
+        p1.start_height,
+        total_vp_except_addr0,
+    );
+
+    // remove VP cap
+    suite.update_vp_cap_percent(None);
+    // updates take effect on the next block
+    suite.advance_block();
+
+    // propose another proposal
+    let (_, id3, p3) = suite.propose_single_choice(&dao, ADDR0, "test proposal", vec![]);
+
+    // effective should now be equal to total since there is no cap
+    suite.assert_effective_udvp(
+        ADDR0,
+        &proposal_module,
+        id3,
+        p3.start_height,
+        total_vp_except_addr0,
+    );
+    suite.assert_total_udvp(
+        ADDR0,
+        &proposal_module,
+        id3,
+        p3.start_height,
+        total_vp_except_addr0,
+    );
+
+    // old proposals should still use old VP caps
+    suite.assert_effective_udvp(
+        ADDR0,
+        &proposal_module,
+        id2,
+        p2.start_height,
+        // VP cap is set to 30% of total voting power
+        suite
+            .members
+            .iter()
+            .map(|m| m.amount)
+            .sum::<Uint128>()
+            .mul_floor(Decimal::percent(30)),
+    );
+    suite.assert_total_udvp(
+        ADDR0,
+        &proposal_module,
+        id2,
+        p2.start_height,
+        total_vp_except_addr0,
+    );
+    suite.assert_effective_udvp(
+        ADDR0,
+        &proposal_module,
+        id1,
+        p1.start_height,
+        // VP cap is set to 50% of total voting power
+        suite
+            .members
+            .iter()
+            .map(|m| m.amount)
+            .sum::<Uint128>()
+            .mul_floor(Decimal::percent(50)),
+    );
+    suite.assert_total_udvp(
+        ADDR0,
+        &proposal_module,
+        id1,
+        p1.start_height,
+        total_vp_except_addr0,
+    );
 }

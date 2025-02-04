@@ -2,25 +2,23 @@ use std::ops::{Deref, DerefMut};
 
 use cosmwasm_std::{Addr, Decimal, Uint128};
 use dao_interface::helpers::{OptionalUpdate, Update};
-use dao_testing::{Cw4TestDao, DaoTestingSuite, DaoTestingSuiteBase};
+use dao_testing::DaoTestingSuiteBase;
 
 use crate::ContractError;
 
-use super::tests::dao_vote_delegation_contract;
+use super::super::tests::dao_vote_delegation_contract;
 
-pub struct DaoVoteDelegationTestingSuite {
+pub struct DaoVoteDelegationTestingSuiteBase {
     /// base testing suite that we're extending
     pub base: DaoTestingSuiteBase,
 
     // initial config
-    vp_cap_percent: Option<Decimal>,
-    delegation_validity_blocks: Option<u64>,
-    max_delegations: Option<u64>,
+    pub vp_cap_percent: Option<Decimal>,
+    pub delegation_validity_blocks: Option<u64>,
+    pub max_delegations: Option<u64>,
 
-    /// cw4-group voting DAO
-    pub dao: Cw4TestDao,
-    /// members of the DAO
-    pub members: Vec<cw4::Member>,
+    /// DAO core address
+    pub dao_core_addr: Addr,
 
     /// delegation code ID
     pub delegation_code_id: u64,
@@ -29,7 +27,7 @@ pub struct DaoVoteDelegationTestingSuite {
 }
 
 // allow direct access to base testing suite methods
-impl Deref for DaoVoteDelegationTestingSuite {
+impl Deref for DaoVoteDelegationTestingSuiteBase {
     type Target = DaoTestingSuiteBase;
 
     fn deref(&self) -> &Self::Target {
@@ -38,20 +36,17 @@ impl Deref for DaoVoteDelegationTestingSuite {
 }
 
 // allow direct access to base testing suite methods
-impl DerefMut for DaoVoteDelegationTestingSuite {
+impl DerefMut for DaoVoteDelegationTestingSuiteBase {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.base
     }
 }
 
 // CONSTRUCTOR
-impl DaoVoteDelegationTestingSuite {
+impl DaoVoteDelegationTestingSuiteBase {
     pub fn new() -> Self {
         let mut base = DaoTestingSuiteBase::base();
         let mut suite = base.cw4();
-
-        let members = suite.members.clone();
-        let dao = suite.dao();
 
         let delegation_code_id = suite.store(dao_vote_delegation_contract);
 
@@ -62,84 +57,16 @@ impl DaoVoteDelegationTestingSuite {
             delegation_validity_blocks: None,
             max_delegations: None,
 
-            dao,
-            members,
+            dao_core_addr: Addr::unchecked(""),
 
             delegation_code_id,
             delegation_addr: Addr::unchecked(""),
         }
     }
-
-    pub fn with_vp_cap_percent(mut self, vp_cap_percent: Decimal) -> Self {
-        self.vp_cap_percent = Some(vp_cap_percent);
-        self
-    }
-
-    pub fn with_delegation_validity_blocks(mut self, delegation_validity_blocks: u64) -> Self {
-        self.delegation_validity_blocks = Some(delegation_validity_blocks);
-        self
-    }
-
-    pub fn with_max_delegations(mut self, max_delegations: u64) -> Self {
-        self.max_delegations = Some(max_delegations);
-        self
-    }
-
-    pub fn build(mut self) -> Self {
-        let code_id = self.delegation_code_id;
-        let core_addr = self.dao.core_addr.clone();
-        let group_addr = self.dao.x.group_addr.to_string();
-        let vp_cap_percent = self.vp_cap_percent;
-        let delegation_validity_blocks = self.delegation_validity_blocks;
-        let max_delegations = self.max_delegations;
-
-        self.delegation_addr = self.instantiate(
-            code_id,
-            &core_addr,
-            &crate::msg::InstantiateMsg {
-                dao: None,
-                vp_hook_callers: Some(vec![group_addr]),
-                no_sync_proposal_modules: None,
-                vp_cap_percent,
-                delegation_validity_blocks,
-                max_delegations,
-            },
-            &[],
-            "delegation",
-            Some(core_addr.to_string()),
-        );
-
-        self.setup_delegation_module();
-
-        self
-    }
 }
 
 // EXECUTIONS
-impl DaoVoteDelegationTestingSuite {
-    /// set up delegation module by adding necessary hooks and adding it to the
-    /// proposal modules
-    pub fn setup_delegation_module(&mut self) {
-        let dao = self.dao.clone();
-        let delegation_addr = self.delegation_addr.to_string();
-
-        // add voting power changed hook to cw4-group
-        self.execute_smart_ok(
-            &dao.core_addr,
-            &dao.x.group_addr,
-            &cw4::Cw4ExecuteMsg::AddHook {
-                addr: delegation_addr.clone(),
-            },
-            &[],
-        );
-
-        // add vote hook to all proposal modules
-        self.add_vote_hook(&dao, &delegation_addr);
-
-        // set the delegation module for all proposal modules
-        self.set_delegation_module(&dao, &delegation_addr);
-    }
-
+impl DaoVoteDelegationTestingSuiteBase {
     /// register a user as a delegate
     pub fn register(&mut self, delegate: impl Into<String>) {
         let delegation_addr = self.delegation_addr.clone();
@@ -219,7 +146,7 @@ impl DaoVoteDelegationTestingSuite {
         add: Option<Vec<String>>,
         remove: Option<Vec<String>>,
     ) {
-        let core_addr = self.dao.core_addr.clone();
+        let core_addr = self.dao_core_addr.clone();
         let delegation_addr = self.delegation_addr.clone();
         self.execute_smart_ok(
             core_addr,
@@ -231,7 +158,7 @@ impl DaoVoteDelegationTestingSuite {
 
     /// sync proposal modules
     pub fn sync_proposal_modules(&mut self, start_after: Option<String>, limit: Option<u32>) {
-        let core_addr = self.dao.core_addr.clone();
+        let core_addr = self.dao_core_addr.clone();
         let delegation_addr = self.delegation_addr.clone();
         self.execute_smart_ok(
             core_addr,
@@ -243,7 +170,7 @@ impl DaoVoteDelegationTestingSuite {
 
     /// update VP cap percent
     pub fn update_vp_cap_percent(&mut self, vp_cap_percent: Option<Decimal>) {
-        let core_addr = self.dao.core_addr.clone();
+        let core_addr = self.dao_core_addr.clone();
         let delegation_addr = self.delegation_addr.clone();
         self.execute_smart_ok(
             core_addr,
@@ -261,7 +188,7 @@ impl DaoVoteDelegationTestingSuite {
 
     /// update delegation validity blocks
     pub fn update_delegation_validity_blocks(&mut self, delegation_validity_blocks: Option<u64>) {
-        let core_addr = self.dao.core_addr.clone();
+        let core_addr = self.dao_core_addr.clone();
         let delegation_addr = self.delegation_addr.clone();
         self.execute_smart_ok(
             core_addr,
@@ -279,7 +206,7 @@ impl DaoVoteDelegationTestingSuite {
 
     /// update max delegations
     pub fn update_max_delegations(&mut self, max_delegations: u64) {
-        let core_addr = self.dao.core_addr.clone();
+        let core_addr = self.dao_core_addr.clone();
         let delegation_addr = self.delegation_addr.clone();
         self.execute_smart_ok(
             core_addr,
@@ -295,7 +222,7 @@ impl DaoVoteDelegationTestingSuite {
 }
 
 /// QUERIES
-impl DaoVoteDelegationTestingSuite {
+impl DaoVoteDelegationTestingSuiteBase {
     /// get whether a delegate is registered
     pub fn registered(&self, delegate: impl Into<String>, height: Option<u64>) -> bool {
         self.querier()
@@ -400,7 +327,7 @@ impl DaoVoteDelegationTestingSuite {
 }
 
 /// ASSERTIONS
-impl DaoVoteDelegationTestingSuite {
+impl DaoVoteDelegationTestingSuiteBase {
     /// assert that there are N delegations
     pub fn assert_delegations_count(&self, delegator: impl Into<String>, count: u32) {
         let delegations = self.delegations(delegator, None, None, None);
