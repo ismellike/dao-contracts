@@ -231,6 +231,10 @@ pub enum QueryMsg {
     /// Returns the total voting power at a given block height.
     #[returns(crate::voting::TotalPowerAtHeightResponse)]
     TotalPowerAtHeight { height: Option<u64> },
+    /// Returns the initial dao actions.
+    /// These are optional actions that were executed when the DAO was instantiated.
+    #[returns(Option<Vec<CosmosMsg>>)]
+    InitialDaoActions {},
 }
 
 #[allow(clippy::large_enum_variant)]
