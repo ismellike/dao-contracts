@@ -321,11 +321,7 @@ impl Suite {
             cw20::Expiration::Never {} => return 0,
         };
 
-        if expiration_unit > current_unit {
-            expiration_unit - current_unit
-        } else {
-            0
-        }
+        expiration_unit.saturating_sub(current_unit)
     }
 
     pub fn get_balance_native<T: Into<String>, U: Into<String>>(

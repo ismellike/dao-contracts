@@ -118,7 +118,7 @@ impl<'a> DaoTestingSuiteCw721<'a> {
     }
 }
 
-impl<'a> DaoTestingSuite<Cw721DaoExtra> for DaoTestingSuiteCw721<'a> {
+impl DaoTestingSuite<Cw721DaoExtra> for DaoTestingSuiteCw721<'_> {
     fn base(&self) -> &DaoTestingSuiteBase {
         self.base
     }
