@@ -123,11 +123,7 @@ pub fn instantiate_contract(
 ) -> Result<Response, ContractError> {
     // Check sender is contract owner if set
     let ownership = cw_ownable::get_ownership(deps.storage)?;
-    if ownership
-        .owner
-        .as_ref()
-        .is_some_and(|owner| *owner != sender)
-    {
+    if ownership.owner != Some(sender) {
         return Err(ContractError::Unauthorized {});
     }
 

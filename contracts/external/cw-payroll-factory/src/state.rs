@@ -19,7 +19,7 @@ pub struct TokenIndexes<'a> {
 }
 
 impl IndexList<VestingContract> for TokenIndexes<'_> {
-    fn get_indexes(&'_ self) -> Box<dyn Iterator<Item = &'_ dyn Index<VestingContract>> + '_> {
+    fn get_indexes(&self) -> Box<dyn Iterator<Item = &dyn Index<VestingContract>> + '_> {
         let v: Vec<&dyn Index<VestingContract>> = vec![&self.instantiator, &self.recipient];
         Box::new(v.into_iter())
     }

@@ -272,7 +272,7 @@ pub fn execute_cancel_stake(
         }
     } else {
         for (token_id, owner, preparer) in token_ids_with_owners_and_preparers {
-            let is_preparer = preparer.as_ref().is_some_and(|p| *p == info.sender);
+            let is_preparer = preparer.as_ref() == Some(&info.sender);
             // only owner or preparer can cancel stake
             if info.sender != owner && !is_preparer {
                 return Err(ContractError::NotPreparerNorOwner {});
