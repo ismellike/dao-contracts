@@ -127,7 +127,7 @@ impl<'a> DaoTestingSuiteToken<'a> {
     }
 }
 
-impl<'a> DaoTestingSuite<TokenDaoExtra> for DaoTestingSuiteToken<'a> {
+impl DaoTestingSuite<TokenDaoExtra> for DaoTestingSuiteToken<'_> {
     fn base(&self) -> &DaoTestingSuiteBase {
         self.base
     }
